@@ -8,6 +8,7 @@ import Control.Monad (forever, forM_)
 import qualified Control.Exception as Exception
 import Data.Char (isAlphaNum, isSpace)
 import Data.Functor ((<$>))
+import Data.List (groupBy)
 import Data.Maybe (catMaybes, listToMaybe)
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..))
@@ -72,23 +73,20 @@ runProcess outHooks cwd path args = do
 parseModuleName :: ReadP r String
 parseModuleName = munch1 (\c -> isAlphaNum c || c == '.' || c == '/')
 
-parseModuleList :: ReadP r [String]
-parseModuleList = do l <- sepBy parseModuleName skipSpaces
-                     return l
-
-parseLine :: String -> Maybe (String, [String])
-parseLine l = case [ r | (r,rest) <- readP_to_S p l, all isSpace rest] of
+parseLine :: String -> Maybe (String, String)
+parseLine l = case [ r | (r,rest) <- readP_to_S parser l, all isSpace rest] of
   []  -> Nothing
   [r] -> Just r
   _   -> Nothing
   where
-    p = do skipSpaces
-           m <- parseModuleName
-           skipSpaces
-           _ <- char ':'
-           skipSpaces
-           ms <- parseModuleList
-           return (m,ms)
+    parser = do skipSpaces
+                m <- parseModuleName
+                skipSpaces
+                _ <- char ':'
+                skipSpaces
+                d <- parseModuleName
+                skipSpaces
+                return (m,d)
 
 trimLines :: [String] -> [String]
 trimLines ls = [ l | l <- ls, isValidLine l]
@@ -98,33 +96,25 @@ trimLines ls = [ l | l <- ls, isValidLine l]
 
 -- Interaction with the outside world.
 
-getModuleDeps :: [String] -> IO (Maybe [(String, [String])])
+-- Run 'ghc -M' and return dependencies for every module.
+getModuleDeps :: [String] -> IO [(String, [String])]
 getModuleDeps ghcArgs =
   withSystemTempDirectory "ghc-parmake" $ \tmpDir -> do
     let tmpFile = tmpDir </> "depends.mk"
     let ghcArgs' = "-M":"-dep-makefile":tmpFile:ghcArgs
     exitCode <- runProcess defaultOutputHooks Nothing "ghc" ghcArgs'
     if exitCode == ExitSuccess
-      then (return . catMaybes . map parseLine . trimLines . lines) <$>
+      then (group . catMaybes . map parseLine . trimLines . lines) <$>
            (openFile tmpFile ReadMode >>= hGetContents)
-      else return Nothing
+      else return []
+  where
+    -- [(A.o,A.hs),(A.o,B.hi),(B.o,B.hs)] =>
+    -- [(A.o,[A.hs,B.hi]), (B.o,[B.hs])]
+    group :: [(String, String)] -> [(String, [String])]
+    group = map (\l -> (fst . head $ l, map snd l)) .
+            groupBy (\a b -> fst a == fst b)
 
--- Argument handling.
-
-getNumJobs :: [String] -> Int
-getNumJobs []         = 1
-getNumJobs ("-j":n:_) =
-  case maybeRead n of
-    Just n' -> abs n'
-    Nothing -> error "The argument to '-j' must be an integer!"
-getNumJobs (_:xs)     = getNumJobs xs
-
-getGhcArgs :: [String] -> [String]
-getGhcArgs []          = []
-getGhcArgs ("-j":_:xs) = xs
-getGhcArgs (x:xs)      = x:(getGhcArgs xs)
-
--- Parallel bits.
+-- Parallel 'make' engine.
 
 -- One-way controller/worker -> logger communication.
 data LogTask = LogStr String | LogStrErr String
@@ -169,6 +159,21 @@ type ControlChan = Chan ControlMessage
 
 controlThread :: OutputHooks -> ControlChan -> WorkerChan -> IO ()
 controlThread = undefined
+
+-- Argument handling.
+
+getNumJobs :: [String] -> Int
+getNumJobs []         = 1
+getNumJobs ("-j":n:_) =
+  case maybeRead n of
+    Just n' -> abs n'
+    Nothing -> error "The argument to '-j' must be an integer!"
+getNumJobs (_:xs)     = getNumJobs xs
+
+getGhcArgs :: [String] -> [String]
+getGhcArgs []          = []
+getGhcArgs ("-j":_:xs) = xs
+getGhcArgs (x:xs)      = x:(getGhcArgs xs)
 
 -- Program entry point.
 
