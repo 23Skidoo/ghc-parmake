@@ -1,0 +1,9 @@
+This is supposed to evolve into a parallel wrapper for 'ghc --make'. I plan to
+integrate it with 'cabal build' eventually.
+
+TODO:
+
+* 'ghc -M' -> dependency graph
+* Parallel compilation
+* Mutually recursive modules
+* Nicer user interface (see http://hackage.haskell.org/trac/hackage/ticket/447)
