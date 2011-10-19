@@ -1,7 +1,16 @@
--- Misc. useful functions.
+-- Misc. small useful functions.
 
-module GHC.ParMake.Common (mapAppend, uniq)
+module GHC.ParMake.Common (mapAppend, maybeRead, pathToMaybe, uniq)
        where
+
+import Data.Maybe (listToMaybe)
+
+maybeRead :: Read a => String -> Maybe a
+maybeRead = fmap fst . listToMaybe . reads
+
+pathToMaybe :: FilePath -> Maybe FilePath
+pathToMaybe [] = Nothing
+pathToMaybe p  = Just p
 
 -- | Map f over l and then append rest to l. More efficient than doing `map f l
 -- ++ rest`.
