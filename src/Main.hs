@@ -1,6 +1,7 @@
 module Main
        where
 
+import qualified BuildPlan
 import Distribution.Compat.ReadP
 
 import Control.Concurrent
@@ -8,7 +9,6 @@ import Control.Monad (forever, forM_)
 import qualified Control.Exception as Exception
 import Data.Char (isAlphaNum, isSpace)
 import Data.Functor ((<$>))
-import Data.List (groupBy)
 import Data.Maybe (catMaybes, listToMaybe)
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..))
@@ -97,22 +97,16 @@ trimLines ls = [ l | l <- ls, isValidLine l]
 -- Interaction with the outside world.
 
 -- Run 'ghc -M' and return dependencies for every module.
-getModuleDeps :: [String] -> IO [(String, [String])]
+getModuleDeps :: [String] -> IO [(String, String)]
 getModuleDeps ghcArgs =
   withSystemTempDirectory "ghc-parmake" $ \tmpDir -> do
     let tmpFile = tmpDir </> "depends.mk"
     let ghcArgs' = "-M":"-dep-makefile":tmpFile:ghcArgs
     exitCode <- runProcess defaultOutputHooks Nothing "ghc" ghcArgs'
     if exitCode == ExitSuccess
-      then (group . catMaybes . map parseLine . trimLines . lines) <$>
+      then (catMaybes . map parseLine . trimLines . lines) <$>
            (openFile tmpFile ReadMode >>= hGetContents)
       else return []
-  where
-    -- [(A.o,A.hs),(A.o,B.hi),(B.o,B.hs)] =>
-    -- [(A.o,[A.hs,B.hi]), (B.o,[B.hs])]
-    group :: [(String, String)] -> [(String, [String])]
-    group = map (\l -> (fst . head $ l, map snd l)) .
-            groupBy (\a b -> fst a == fst b)
 
 -- Parallel 'make' engine.
 
@@ -184,5 +178,6 @@ main = do args <- getArgs
           putStrLn $ "Num jobs: " ++ show numJobs
           putStrLn $ "GHC args: " ++ show ghcArgs
           putStrLn "Trying to parse module dependency information..."
-          g <- getModuleDeps ghcArgs
+          ds <- getModuleDeps ghcArgs
+          let g = BuildPlan.new ds
           print g
