@@ -1,9 +1,6 @@
 module Main
        where
 
-import qualified BuildPlan
-import Distribution.Compat.ReadP
-
 import Control.Concurrent
 import Control.Monad (forever, forM_)
 import qualified Control.Exception as Exception
@@ -17,6 +14,9 @@ import System.IO (openFile, hClose, hGetContents, hPutStrLn,
                   hSetBinaryMode, stderr, IOMode(..))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (runInteractiveProcess, waitForProcess)
+
+import qualified GHC.ParMake.BuildPlan as BuildPlan
+import Distribution.Compat.ReadP
 
 -- Helpers.
 

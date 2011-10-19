@@ -2,16 +2,18 @@
 -- code becomes part of cabal-install, it'd be nice to merge both modules
 -- somehow.
 
-module BuildPlan
+module GHC.ParMake.BuildPlan
        where
 
 import qualified Data.Array as Array
 import qualified Data.Graph as Graph
 import Data.Array ((!))
 import Data.Graph (Graph)
-import Data.List (groupBy, sortBy)
+import Data.List (groupBy, sort, sortBy)
 import Data.Ord (comparing)
-import System.FilePath -- (replaceExtension)
+import System.FilePath (replaceExtension, takeExtension)
+
+import GHC.ParMake.Common (mapAppend, uniq)
 
 type TargetId = FilePath
 data Target = TargetModule TargetId [TargetId]
@@ -63,24 +65,26 @@ new deps = BuildPlan graph vertexToTarget targetIdToVertex
           GT -> binarySearch (mid+1) b key
       where mid = (a + b) `div` 2
 
-
 -- | Given a list of (target, dependency) pairs, produce a list of Targets. Note
 -- that we need to make all implicit *.hi -> *.o dependencies explicit.
 depsToTargets :: [(TargetId, TargetId)] -> [Target]
-depsToTargets deps = interfaceTargets deps ++ moduleTargets deps
+depsToTargets deps = interfaceTargets {- ++ -} (moduleTargets deps)
   where
+    -- [(A.o,B.hi),(A.o,C.hi),...] =>
+    -- [TargetInterface B.hi B.hs, TargetInterface C.hu C.hs] ++ rest
+    interfaceTargets :: [Target] -> [Target]
+    interfaceTargets = mapAppend mkInterfaceTarget
+                       (uniq . sort . filter isInterface . flatten $ deps)
+
     -- [(A.o,A.hs),(A.o,B.hi),(B.o,B.hs)] =>
     -- [TargetModule A.o [A.hs,B.hi], TargetModule B.o [B.hs]]
     moduleTargets :: [(TargetId, TargetId)] -> [Target]
     moduleTargets = map (\l -> TargetModule (fst . head $ l) (map snd l)) .
                     groupBy (\a b -> fst a == fst b)
 
-    -- [(A.o,A.hs),(A.o,B.hi),(A.o,C.hi),(B.o,B.hs),(C.o,C.hs)] =>
-    -- [TargetInterface B.hi B.o, TargetInterface C.hi C.o]
-    interfaceTargets :: [(TargetId, TargetId)] -> [Target]
-    interfaceTargets =
-      map (\tId -> TargetInterface tId (replaceExtension tId ".o"))
-      . filter isInterface . flatten
+    -- B.hi => TargetInterface B.hi B.o
+    mkInterfaceTarget :: TargetId -> Target
+    mkInterfaceTarget tId = TargetInterface tId (replaceExtension tId ".o")
 
     isInterface :: TargetId -> Bool
     isInterface tId = let ext = takeExtension tId

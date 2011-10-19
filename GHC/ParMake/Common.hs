@@ -1,0 +1,19 @@
+-- Misc. useful functions.
+
+module GHC.ParMake.Common (mapAppend, uniq)
+       where
+
+-- | Map f over l and then append rest to l. More efficient than doing `map f l
+-- ++ rest`.
+mapAppend :: (t -> a) -> [t] -> [a] -> [a]
+mapAppend f l rest = go l
+  where
+    go [] = rest
+    go (x:xs) = f x : go xs
+
+-- | Remove consecutive duplicate elements from a list.
+uniq :: Eq a => [a] -> [a]
+uniq [] = []
+uniq [x] = [x]
+uniq (x1:x2:xs) = let rest = x2:xs
+                  in if x1 == x2 then uniq rest else x1 : uniq rest
