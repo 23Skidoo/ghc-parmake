@@ -3,7 +3,7 @@ integrate it with 'cabal build' eventually.
 
 TODO:
 
-* 'ghc -M' -> dependency graph
-* Parallel compilation
+* Serial compilation (feature parity with 'ghc --make')
 * Mutually recursive modules
+* Parallel compilation
 * Nicer user interface (see http://hackage.haskell.org/trac/hackage/ticket/447)
