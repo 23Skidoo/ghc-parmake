@@ -16,4 +16,4 @@ Executable ghc-parmake
                  containers >= 0.4 && < 0.5,
                  process >= 1 && < 2, temporary >= 1 && < 2,
                  filepath >= 1 && < 2
-  Ghc-Options: -Wall
+  Ghc-Options: -Wall -threaded -rtsopts
