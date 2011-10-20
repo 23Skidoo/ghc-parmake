@@ -34,6 +34,7 @@ main = do args <- getArgs
           putStrLn $ "GHC args: " ++ show ghcArgs
           putStrLn "Trying to parse module dependency information..."
           ds <- Parse.getModuleDeps ghcArgs
+          print ds
           let plan = BuildPlan.new ds
           print plan
           Engine.compileInParallel plan
