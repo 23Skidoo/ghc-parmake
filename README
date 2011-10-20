@@ -3,8 +3,9 @@ integrate it with 'cabal build' eventually.
 
 TODO:
 
-* Serial compilation (feature parity with 'ghc --make')
+* Add tests: use test-framework
+             + quickcheck & hunit + test-suite: exitcode-stdio.
 * Mutually recursive modules
+* Serial compilation (feature parity with 'ghc --make')
 * Parallel compilation
-* Add tests.
 * Nicer user interface (see http://hackage.haskell.org/trac/hackage/ticket/447)
