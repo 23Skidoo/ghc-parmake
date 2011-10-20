@@ -1,11 +1,19 @@
-This is supposed to evolve into a parallel wrapper for 'ghc --make'. I plan to
+This is slowly evolving into a parallel wrapper for 'ghc --make'. I plan to
 integrate it with 'cabal build' eventually.
+
+Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
 TODO:
 
-* Add tests: use test-framework
-             + quickcheck & hunit + test-suite: exitcode-stdio.
-* Mutually recursive modules
+* Add QuickCheck properties for the BuildPlan type.
+* Add support for mutually recursive modules
+* Remove .hi/.hi-boot nodes from the build graph (only need to keep this info in
+  the target's dependencies list)
 * Serial compilation (feature parity with 'ghc --make')
 * Parallel compilation
-* Nicer user interface (see http://hackage.haskell.org/trac/hackage/ticket/447)
+* Be able to build itself & simple test projects
+* Add functional tests (HUnit).
+* Test on some large project (e.g. Darcs/Agda)
+
+* Later: Nicer user interface (see
+  http://hackage.haskell.org/trac/hackage/ticket/447 )
