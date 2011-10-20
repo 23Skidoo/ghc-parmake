@@ -17,3 +17,7 @@ Executable ghc-parmake
                  process >= 1 && < 2, temporary >= 1 && < 2,
                  filepath >= 1 && < 2
   Ghc-Options: -Wall -threaded -rtsopts
+
+Source-repository head
+  type:           git
+  location:       https://github.com/23Skidoo/ghc-parmake.git
