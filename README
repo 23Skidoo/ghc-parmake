@@ -6,4 +6,5 @@ TODO:
 * Serial compilation (feature parity with 'ghc --make')
 * Mutually recursive modules
 * Parallel compilation
+* Add tests.
 * Nicer user interface (see http://hackage.haskell.org/trac/hackage/ticket/447)
