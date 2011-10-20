@@ -1,23 +1,52 @@
-Name:                ghc-parmake
-Version:             0.1
-Synopsis:            A parallel wrapper for 'ghc --make'.
-Homepage:            https://github.com/23Skidoo/ghc-parmake
-License:             BSD3
-License-file:        LICENSE
-Author:              Mikhail Glushenkov
-Maintainer:          the.dead.shall.rise@gmail.com
-Category:            Development
-Build-type:          Simple
-Cabal-version:       >=1.2
+Name:                   ghc-parmake
+Version:                0.1
+Synopsis:               A parallel wrapper for 'ghc --make'.
+Homepage:               https://github.com/23Skidoo/ghc-parmake
+License:                BSD3
+License-file:           LICENSE
+Author:                 Mikhail Glushenkov
+Maintainer:             the.dead.shall.rise@gmail.com
+Category:               Development
+Build-type:             Simple
+Cabal-version:          >=1.8
+
+Library
+  Exposed-modules:      GHC.ParMake.BuildPlan
+                        GHC.ParMake.Common
+                        GHC.ParMake.Engine
+                        GHC.ParMake.Parse
+                        GHC.ParMake.Util
+  Other-modules:        Distribution.Compat.ReadP
+  Build-depends:        array >= 0.3 && < 0.4, base >= 4 && < 5,
+                        containers >= 0.4 && < 0.5,
+                        process >= 1 && < 2, temporary >= 1 && < 2,
+                        filepath >= 1 && < 2
+  Ghc-options:          -Wall
+  if impl(ghc >= 6.8)
+    Ghc-options:        -fwarn-tabs
 
 Executable ghc-parmake
-  Main-is: Main.hs
-  Build-depends: array >= 0.3 && < 0.4, base >= 4 && < 5,
-                 containers >= 0.4 && < 0.5,
-                 process >= 1 && < 2, temporary >= 1 && < 2,
-                 filepath >= 1 && < 2
-  Ghc-Options: -Wall -threaded -rtsopts
+  Main-is:              Main.hs
+  Build-depends:        ghc-parmake == 0.1.*,
+                        array >= 0.3 && < 0.4, base >= 4 && < 5,
+                        containers >= 0.4 && < 0.5,
+                        process >= 1 && < 2, temporary >= 1 && < 2,
+                        filepath >= 1 && < 2
+  Ghc-options:          -Wall -threaded -rtsopts
+  if impl(ghc >= 6.8)
+    Ghc-options:        -fwarn-tabs
+
+Test-suite tests
+  Type:                 exitcode-stdio-1.0
+  Hs-source-dirs:       tests
+  Main-is:              Properties.hs
+  Build-depends:        base >= 4.0 && < 5,
+                        ghc-parmake == 0.1.*,
+                        test-framework >= 0.4.1 && < 0.5,
+                        test-framework-quickcheck2 >= 0.2.10 && < 0.3,
+                        QuickCheck >= 2.4.1.1
+  Ghc-Options:          -Wall -threaded -rtsopts
 
 Source-repository head
-  type:           git
-  location:       https://github.com/23Skidoo/ghc-parmake.git
+  Type:                 git
+  Location:             https://github.com/23Skidoo/ghc-parmake.git
