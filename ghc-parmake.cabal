@@ -41,6 +41,7 @@ Test-suite tests
   Hs-source-dirs:       tests
   Main-is:              Properties.hs
   Build-depends:        base >= 4.0 && < 5,
+                        filepath >= 1 && < 2,
                         ghc-parmake == 0.1.*,
                         test-framework >= 0.4.1 && < 0.5,
                         test-framework-quickcheck2 >= 0.2.10 && < 0.3,

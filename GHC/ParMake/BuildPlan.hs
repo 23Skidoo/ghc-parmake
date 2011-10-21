@@ -3,7 +3,8 @@
 -- somehow.
 
 module GHC.ParMake.BuildPlan
-       (new, ready, building, completed, numBuilding, hasBuilding
+       (new, ready, building, completed
+       , numCompleted, markCompleted, numBuilding, hasBuilding
        , markReadyAsBuilding, BuildPlan, Target, TargetId, targetId, depends)
        where
 
@@ -26,7 +27,7 @@ import GHC.ParMake.Common (appendMap, uniq)
 type TargetId = FilePath
 data Target = TargetModule TargetId [TargetId]
             | TargetInterface TargetId TargetId
-            deriving Show
+            deriving (Show,Eq)
 
 -- | Given a Target, return its ID.
 targetId :: Target -> TargetId
@@ -40,36 +41,62 @@ depends (TargetInterface _ d) = [d]
 
 -- | A graph of all dependencies between targets.
 data BuildPlan = BuildPlan {
-  planGraph :: Graph,
-  planGraphRev :: Graph,
-  planTargetOf :: Graph.Vertex -> Target,
-  planVertexOf :: TargetId -> Maybe Graph.Vertex,
-  -- Target => number of dependencies that are not ready yet.
-  planNumDeps :: IntMap Int,
-  -- Targets that are ready to be built.
-  planReady :: IntSet,
-  -- Targets that are currently building.
-  planBuilding :: IntSet
-}
+  planGraph     :: Graph,
+  planGraphRev  :: Graph,
+  planTargets   :: Graph.Table Target,
+  planTargetIds :: Graph.Table TargetId,
 
-instance Show BuildPlan where
-  show = show . planGraph
+  -- Target => number of dependencies that are not built yet.
+  planNumDeps   :: IntMap Int,
+  -- Targets that are ready to be built.
+  planReady     :: IntSet,
+  -- Targets that are currently building.
+  planBuilding  :: IntSet
+} deriving Show
+
+-- TODO: Move these back into BuildPlan
+planTargetOf :: BuildPlan -> Graph.Vertex -> Target
+planTargetOf plan vertex = targetTable ! vertex
+  where
+    targetTable = planTargets plan
+
+planVertexOf :: BuildPlan -> TargetId -> Maybe Graph.Vertex
+planVertexOf plan = binarySearch lowBound topBound
+  where
+    targetIdTable = planTargetIds plan
+    (lowBound, topBound) = Array.bounds targetIdTable
+    binarySearch a b key
+      | a > b     = Nothing
+      | otherwise = case compare key (targetIdTable ! mid) of
+        LT -> binarySearch a (mid-1) key
+        EQ -> Just mid
+        GT -> binarySearch (mid+1) b key
+      where mid = (a + b) `div` 2
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
 new :: [(TargetId, TargetId)] -> BuildPlan
-new deps = BuildPlan graph graphRev vertexToTarget targetIdToVertex
-           numDepsMap readySet buildingSet
+new deps = plan
   where
+    plan = BuildPlan graph graphRev targetTable targetIdTable
+           numDepsMap readySet buildingSet
+    targetIdToVertex = planVertexOf plan
+
     graph = Array.listArray bounds
             [ [ v | Just v <- map targetIdToVertex (depends target)]
             | target <- targets ]
     graphRev = Graph.transposeG graph
-    vertexToTarget vertex = targetTable ! vertex
-    targetIdToVertex      = binarySearch 0 topBound
 
-    numDepsMap = IntMap.fromList . map (\(n,t) -> (n, length . depends $ t))
+    numDepsMap = IntMap.fromList . map (\(n,t) -> (n, countNumDeps t))
                  . zip [0..] $ targets
+      where
+        -- Each '.o' node has an additional dependency on a '.hs' node which is
+        -- not in the graph
+        countNumDeps t = let numDeps = length . depends $ t
+                         in if not . isInterface $ t
+                            then numDeps - 1 else numDeps
+        isInterface (TargetInterface _ _) = True
+        isInterface _                     = False
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
       where hasSingleSourceDep (_,t) = case depends t of
@@ -83,13 +110,6 @@ new deps = BuildPlan graph graphRev vertexToTarget targetIdToVertex
     topBound      = length targets - 1
     bounds        = (0, topBound)
 
-    binarySearch a b key
-      | a > b     = Nothing
-      | otherwise = case compare key (targetIdTable ! mid) of
-          LT -> binarySearch a (mid-1) key
-          EQ -> Just mid
-          GT -> binarySearch (mid+1) b key
-      where mid = (a + b) `div` 2
 
 -- | Given a list of (target, dependency) pairs, produce a list of Targets. Note
 -- that we need to make all implicit *.hi -> *.o dependencies explicit.
@@ -134,6 +154,21 @@ ready = verticesToTargets planReady
 building :: BuildPlan -> [Target]
 building = verticesToTargets planBuilding
 
+-- | Return all targets that were built successfully.
+completed :: BuildPlan -> [Target]
+completed plan = map (planTargetOf plan) keysCompleted
+  where
+    keysCompleted = IntMap.foldWithKey f [] (planNumDeps plan)
+    f key n ks = if n == 0
+                    && (not $ n `IntSet.member` planBuilding plan)
+                    && (not $ n `IntSet.member` planReady plan)
+                 then key:ks else ks
+
+numCompleted :: BuildPlan -> Int
+numCompleted plan = IntMap.fold f 0 (planNumDeps plan)
+  where
+    f n total = if n == 0 then total + 1 else total
+
 -- | Mark all "ready" targets as "currently building".
 markReadyAsBuilding :: BuildPlan -> BuildPlan
 markReadyAsBuilding plan = plan {
@@ -150,8 +185,8 @@ hasBuilding :: BuildPlan -> Bool
 hasBuilding = not . IntSet.null . planBuilding
 
 -- | Mark target as built successfully.
-completed :: BuildPlan -> Target -> BuildPlan
-completed plan target = assert check newPlan
+markCompleted :: BuildPlan -> Target -> BuildPlan
+markCompleted plan target = assert check newPlan
   where
     check = vertex `IntSet.member` planBuilding plan
     vertex = fromMaybe
