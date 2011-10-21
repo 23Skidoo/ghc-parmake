@@ -48,8 +48,7 @@ arbitraryName = (listOf . elements $ ['A'..'Z'] ++ ['a'..'z'] ++ ['0'..'9'])
                 `suchThat` (\l -> (not . null $ l)
                                   && (not . isDigit . head $ l)
                                   && (length l >= 4)
-                                  && (isUpper . head $ l)
-                           )
+                                  && (isUpper . head $ l))
 
 pMarkCompleted :: DepsList -> Bool
 pMarkCompleted (DepsList []) = True
