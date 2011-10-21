@@ -21,7 +21,7 @@ import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
 
-import GHC.ParMake.Common (mapAppend, uniq)
+import GHC.ParMake.Common (appendMap, uniq)
 
 type TargetId = FilePath
 data Target = TargetModule TargetId [TargetId]
@@ -99,7 +99,7 @@ depsToTargets deps = interfaceTargets {- ++ -} (moduleTargets deps)
     -- [(A.o,B.hi),(A.o,C.hi),...] =>
     -- [TargetInterface B.hi B.hs, TargetInterface C.hu C.hs] ++ rest
     interfaceTargets :: [Target] -> [Target]
-    interfaceTargets = mapAppend mkInterfaceTarget
+    interfaceTargets = appendMap mkInterfaceTarget
                        (uniq . sort . filter isInterface . flatten $ deps)
 
     -- [(A.o,A.hs),(A.o,B.hi),(B.o,B.hs)] =>

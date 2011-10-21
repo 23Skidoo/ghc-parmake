@@ -1,6 +1,6 @@
 -- Misc. small useful functions.
 
-module GHC.ParMake.Common (mapAppend, maybeRead, pathToMaybe, uniq)
+module GHC.ParMake.Common (appendMap, maybeRead, pathToMaybe, uniq)
        where
 
 import Data.Maybe (listToMaybe)
@@ -14,8 +14,8 @@ pathToMaybe p  = Just p
 
 -- | Map f over l and then append rest to l. More efficient than doing `map f l
 -- ++ rest`.
-mapAppend :: (t -> a) -> [t] -> [a] -> [a]
-mapAppend f l rest = go l
+appendMap :: (t -> a) -> [t] -> [a] -> [a]
+appendMap f l rest = go l
   where
     go [] = rest
     go (x:xs) = f x : go xs
