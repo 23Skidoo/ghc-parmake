@@ -3,7 +3,7 @@
 -- somehow.
 
 module GHC.ParMake.BuildPlan
-       (new, ready, building, completed
+       (new, ready, building, completed, size
        , numCompleted, markCompleted, numBuilding, hasBuilding
        , markReadyAsBuilding, BuildPlan, Target, TargetId, targetId, depends)
        where
@@ -110,6 +110,9 @@ new deps = plan
     topBound      = length targets - 1
     bounds        = (0, topBound)
 
+-- | Total number of targets in the BuildPlan.
+size :: BuildPlan -> Int
+size = (+) 1 . snd . Array.bounds . planGraph
 
 -- | Given a list of (target, dependency) pairs, produce a list of Targets. Note
 -- that we need to make all implicit *.hi -> *.o dependencies explicit.

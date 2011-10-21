@@ -1,6 +1,7 @@
 module Main
        where
 
+import Data.Char
 import Data.List
 import System.FilePath
 import Test.QuickCheck
@@ -21,13 +22,15 @@ mkObjsDeps :: [TargetId] -> Gen [(TargetId, TargetId)]
 mkObjsDeps []       = return []
 mkObjsDeps [fn]     = return [(fn <.> "o", fn <.> "hs")]
 mkObjsDeps (fn:fns) =
-  -- Take a random subset of program modules.
+  -- Choose a random subset of program modules to be used as dependencies for
+  -- this file.
   do ifcs' <- listOf $ elements fns
      let ifcs = uniq . sort $ ifcs'
-     -- Generate deps for this file.
+     -- Generate a dep list for this file: each .o depends on a .hs plus a
+     -- number of ".hi"s chosen in the previous step.
      let fnExt = fn <.> "o"
      let deps = (fnExt, fn <.> "hs") : map (\i -> (fnExt, i <.> "hi")) ifcs
-     -- Generate a deps for the remaining modules.
+     -- Generate dep lists for the remaining modules.
      rest <- (mkObjsDeps fns)
      return $ deps ++ rest
 
@@ -36,8 +39,17 @@ arbitraryDepsList = do fns' <- listOf arbitraryName `suchThat` ((<=) 5 . length)
                        let fns = uniq . sort $ fns'
                        mkObjsDeps fns
 
+-- A simpler name generator.
+-- arbitraryName :: Gen TargetId
+-- arbitraryName = fmap (:[]) $ elements ['A'..'Z']
+
 arbitraryName :: Gen TargetId
-arbitraryName = fmap (:[]) $ elements ['A'..'Z']
+arbitraryName = (listOf . elements $ ['A'..'Z'] ++ ['a'..'z'] ++ ['0'..'9'])
+                `suchThat` (\l -> (not . null $ l)
+                                  && (not . isDigit . head $ l)
+                                  && (length l >= 4)
+                                  && (isUpper . head $ l)
+                           )
 
 pMarkCompleted :: DepsList -> Bool
 pMarkCompleted (DepsList []) = True
@@ -48,13 +60,17 @@ pMarkCompleted (DepsList  l) =
       plan'' = BuildPlan.markCompleted plan' target
   in target `elem` BuildPlan.completed plan''
 
--- arbitraryName :: Gen TargetId
--- arbitraryName = (listOf . elements $ ['A'..'Z'] ++ ['a'..'z'] ++ ['0'..'9'])
---                 `suchThat` (\l -> (not . null $ l)
---                                   && (not . isDigit . head $ l)
---                                   && (length l >= 4)
---                                   && (isUpper . head $ l)
---                            )
+pCompile :: DepsList -> Bool
+pCompile (DepsList []) = True
+pCompile (DepsList l) = go $ BuildPlan.new l
+  where
+    go plan = if null rdy then check plan else go plan''
+      where
+        rdy = BuildPlan.ready plan
+        plan' = BuildPlan.markReadyAsBuilding plan
+        plan'' = foldr (flip BuildPlan.markCompleted) plan' rdy
+        check p = BuildPlan.numBuilding p == 0
+                  && (length $ BuildPlan.completed p) == BuildPlan.size p
 
 pAppendMap :: [Int] -> [Int] -> Bool
 pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
@@ -69,6 +85,7 @@ tests :: [Test]
 tests =
     [ testProperty "appendMap" pAppendMap
     , testProperty "markCompleted" pMarkCompleted
+    , testProperty "compile" pCompile
     -- , testGroup "text"
     --   [ testProperty "text/strict" pText
     --   , testProperty "text/lazy" pTextLazy
