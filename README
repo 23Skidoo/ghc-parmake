@@ -5,8 +5,6 @@ Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
 TODO:
 
-* Add support for mutually recursive modules (just recognize .hs-boot and
-  .hi-boot extensions)
 * Remove .hi/.hi-boot nodes from the build graph (we only need to keep this info
   in the target's dependencies list)
 * Move planTargetOf/planVertexOf back into BuildPlan and add a custom Show
