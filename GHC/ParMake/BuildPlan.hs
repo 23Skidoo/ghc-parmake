@@ -60,8 +60,8 @@ objExts       = [".o", ".o-boot"]
 data BuildPlan = BuildPlan {
   planGraph     :: Graph,
   planGraphRev  :: Graph,
-  planTargets   :: Graph.Table Target,
-  planTargetIds :: Graph.Table TargetId,
+  planVertexOf  :: TargetId -> Maybe Graph.Vertex,
+  planTargetOf  :: Graph.Vertex -> Target,
 
   -- Target => number of dependencies that are not built yet.
   planNumDeps   :: IntMap Int,
@@ -69,35 +69,34 @@ data BuildPlan = BuildPlan {
   planReady     :: IntSet,
   -- Targets that are currently building.
   planBuilding  :: IntSet
-} deriving Show
+}
 
--- TODO: Move these back into BuildPlan
-planTargetOf :: BuildPlan -> Graph.Vertex -> Target
-planTargetOf plan vertex = targetTable ! vertex
-  where
-    targetTable = planTargets plan
-
-planVertexOf :: BuildPlan -> TargetId -> Maybe Graph.Vertex
-planVertexOf plan = binarySearch lowBound topBound
-  where
-    targetIdTable = planTargetIds plan
-    (lowBound, topBound) = Array.bounds targetIdTable
-    binarySearch a b key
-      | a > b     = Nothing
-      | otherwise = case compare key (targetIdTable ! mid) of
-        LT -> binarySearch a (mid-1) key
-        EQ -> Just mid
-        GT -> binarySearch (mid+1) b key
-      where mid = (a + b) `div` 2
+-- For debugging.
+instance Show BuildPlan where
+  show p = "BuildPlan {\n planGraph = "
+           ++ show (planGraph p)
+           ++ ",\n"
+           ++ " planTargetIdOf = " ++ show numberedTargetIds ++ ",\n"
+           ++ " planTargets = " ++ show targets ++ ",\n"
+           ++ " planNumDeps = " ++ show (planNumDeps p) ++ ",\n"
+           ++ " planReady = " ++ show (planReady p) ++ ",\n"
+           ++ " planBuilding = " ++ show (planBuilding p)
+           ++ "\n}"
+    where
+      targets           = map (planTargetOf p)[0..topBound]
+      targetIds         = map targetId targets
+      numberedTargetIds = (zip [(0::Int)..] targetIds)
+      topBound          = snd . Array.bounds . planGraph $ p
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
 new :: [(TargetId, TargetId)] -> BuildPlan
 new deps = plan
   where
-    plan = BuildPlan graph graphRev targetTable targetIdTable
+    plan = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
            numDepsMap readySet buildingSet
-    targetIdToVertex = planVertexOf plan
+    targetIdToVertex   = binarySearch 0 topBound
+    vertexToTargetId v = targetTable ! v
 
     graph = Array.listArray bounds
             [ [ v | Just v <- map targetIdToVertex (depends target)]
@@ -125,6 +124,15 @@ new deps = plan
     targets       = sortBy (comparing targetId) (depsToTargets deps)
     topBound      = length targets - 1
     bounds        = (0, topBound)
+
+    binarySearch a b key
+      | a > b     = Nothing
+      | otherwise = case compare key (targetIdTable ! mid) of
+        LT -> binarySearch a (mid-1) key
+        EQ -> Just mid
+        GT -> binarySearch (mid+1) b key
+      where mid = (a + b) `div` 2
+
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
