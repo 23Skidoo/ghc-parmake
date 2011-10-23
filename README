@@ -5,14 +5,11 @@ Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
 TODO:
 
-* Remove .hi/.hi-boot nodes from the build graph (we only need to keep this info
-  in the target's dependencies list) - edges should go directly from .o to .o,
-  but dependencies should list .hi.
 * Serial compilation (feature parity with 'ghc --make')
-* Parallel compilation
-* Be able to build itself & simple test projects
 * Add functional tests (HUnit).
 * Tests with .lhs/.lhs-boot
+* Parallel compilation
+* Be able to build itself & simple test projects
 * Test on some large project (e.g. Darcs/Agda)
 
 * Later: Nicer user interface (see

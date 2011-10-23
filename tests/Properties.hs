@@ -57,7 +57,7 @@ pMarkCompleted (DepsList  l) =
       target = head . BuildPlan.ready $ plan
       plan' = BuildPlan.markReadyAsBuilding plan
       plan'' = BuildPlan.markCompleted plan' target
-  in target `elem` BuildPlan.completed plan''
+  in [target] == BuildPlan.completed plan''
 
 pCompile :: DepsList -> Bool
 pCompile (DepsList []) = True

@@ -15,41 +15,25 @@ import qualified Data.IntSet as IntSet
 import Control.Exception (assert)
 import Data.Array ((!))
 import Data.Graph (Graph)
+import Data.Function (on)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
-import Data.List (groupBy, sort, sortBy)
+import Data.List (groupBy, sortBy)
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
 
-import GHC.ParMake.Common (appendMap, uniq)
-
 type TargetId = FilePath
-data Target = TargetModule TargetId [TargetId]
-            | TargetBootModule TargetId [TargetId]
-            | TargetInterface TargetId TargetId
-            | TargetBootInterface TargetId TargetId
+data Target = Target TargetId [TargetId]
             deriving (Show,Eq)
 
 -- | Given a Target, return its ID.
 targetId :: Target -> TargetId
-targetId (TargetModule        tId _) = tId
-targetId (TargetBootModule    tId _) = tId
-targetId (TargetInterface     tId _) = tId
-targetId (TargetBootInterface tId _) = tId
+targetId (Target tId _) = tId
 
 -- | Given a Target, return its dependencies.
 depends :: Target -> [TargetId]
-depends (TargetModule        _ deps) = deps
-depends (TargetBootModule    _ deps) = deps
-depends (TargetInterface     _ d   ) = [d]
-depends (TargetBootInterface _ d   ) = [d]
-
--- | Is this Target an interface?
-isInterface :: Target -> Bool
-isInterface (TargetInterface     _ _) = True
-isInterface (TargetBootInterface _ _) = True
-isInterface _                         = False
+depends (Target _ deps) = deps
 
 sourceExts, interfaceExts, objExts :: [String]
 sourceExts    = [".hs", ".lhs", ".hs-boot", ".lhs-boot"]
@@ -99,18 +83,25 @@ new deps = plan
     vertexToTargetId v = targetTable ! v
 
     graph = Array.listArray bounds
-            [ [ v | Just v <- map targetIdToVertex (depends target)]
+            [ [ v | Just v <- map targetIdToVertex
+                              . map interfaceToObj $ depends target]
             | target <- targets ]
+      where
+        -- We don't keep '.hi' targets in the graph, only in the depends list.
+        interfaceToObj tId =
+          case takeExtension tId of
+            ".hi"      -> replaceExtension tId ".o"
+            ".hi-boot" -> replaceExtension tId ".o-boot"
+            _          -> tId
+
     graphRev = Graph.transposeG graph
 
     numDepsMap = IntMap.fromList . map (\(n,t) -> (n, countNumDeps t))
                  . zip [0..] $ targets
       where
-        -- Each '.o' node has an additional dependency on a '.hs' node which is
-        -- not in the graph.
-        countNumDeps t = let numDeps = length . depends $ t
-                         in if not . isInterface $ t
-                            then numDeps - 1 else numDeps
+        -- Each target has an additional dependency on a '.hs' file which is not
+        -- in the graph.
+        countNumDeps = subtract 1 . length . depends
 
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
@@ -133,56 +124,20 @@ new deps = plan
         GT -> binarySearch (mid+1) b key
       where mid = (a + b) `div` 2
 
+-- | Given a list of (target, dependency) pairs, produce a list of Targets.
+depsToTargets :: [(TargetId, TargetId)] -> [Target]
+depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
+                groupBy ((==) `on` fst)
+  where
+    mkModuleTarget tId deps = assert check (Target tId deps)
+      where
+        check = (takeExtension tId `elem` objExts)
+                && (length deps == 1
+                    || or [ takeExtension d `elem` interfaceExts | d <- deps ])
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
 size = (+) 1 . snd . Array.bounds . planGraphRev
-
--- | Given a list of (target, dependency) pairs, produce a list of Targets. Note
--- that we need to make all implicit *.hi -> *.o dependencies explicit.
-depsToTargets :: [(TargetId, TargetId)] -> [Target]
-depsToTargets deps = interfaceTargets {- ++ -} (moduleTargets deps)
-  where
-    -- [(A.o,B.hi),(A.o,C.hi),...] =>
-    -- [TargetInterface B.hi B.hs, TargetInterface C.hi C.hs] ++ rest
-    interfaceTargets :: [Target] -> [Target]
-    interfaceTargets = appendMap mkInterfaceTarget
-                       (uniq . sort . filter isInterfaceTarget . flatten $ deps)
-      where
-        isInterfaceTarget tId = takeExtension tId `elem` interfaceExts
-
-    -- B.hi => TargetInterface B.hi B.o
-    -- B.hi-boot -> TargetBootInterface B.hi-boot B.o-boot
-    mkInterfaceTarget :: TargetId -> Target
-    mkInterfaceTarget tId = assert (takeExtension tId `elem` interfaceExts) ret
-      where
-        ret = if isPlainInterface tId
-              then TargetInterface tId (replaceExtension tId ".o")
-              else TargetBootInterface tId (replaceExtension tId ".o-boot")
-        isPlainInterface = (==) ".hi" . takeExtension
-
-    -- [(A.o,A.hs),(A.o,B.hi),(B.o,B.hs)] =>
-    -- [TargetModule A.o [A.hs,B.hi], TargetModule B.o [B.hs]]
-    moduleTargets :: [(TargetId, TargetId)] -> [Target]
-    moduleTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
-                    groupBy (\a b -> fst a == fst b)
-
-    -- A.o deps => TargetModule A.o deps
-    -- A.o-boot deps => TargetModule A.o-boot deps
-    mkModuleTarget :: TargetId -> [TargetId] -> Target
-    mkModuleTarget tId tDeps = assert (takeExtension tId `elem` objExts) ret
-      where
-        ret = if isPlainModule tId
-              then TargetModule tId tDeps
-              else TargetBootModule tId tDeps
-        isPlainModule = (==) ".o" . takeExtension
-
-    -- [(a,b),(c,d)] => [a,b,c,d]
-    flatten :: [(TargetId, TargetId)] -> [TargetId]
-    flatten l = flatten' l []
-      where
-        flatten' []           accum = accum
-        flatten' ((s1,s2):ss) accum = accum `seq` flatten' ss (s1:s2:accum)
 
 verticesToTargets :: (BuildPlan -> IntSet) -> BuildPlan -> [Target]
 verticesToTargets getVertexSet plan =
@@ -201,9 +156,11 @@ completed :: BuildPlan -> [Target]
 completed plan = map (planTargetOf plan) keysCompleted
   where
     keysCompleted = IntMap.foldWithKey f [] (planNumDeps plan)
+    bldng         = planBuilding plan
+    rdy           = planReady plan
     f key n ks = if n == 0
-                    && (not $ n `IntSet.member` planBuilding plan)
-                    && (not $ n `IntSet.member` planReady plan)
+                    && (not $ key `IntSet.member` bldng)
+                    && (not $ key `IntSet.member` rdy)
                  then key:ks else ks
 
 numCompleted :: BuildPlan -> Int
