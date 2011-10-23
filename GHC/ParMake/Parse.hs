@@ -15,7 +15,8 @@ import Distribution.Compat.ReadP
 import GHC.ParMake.Util (defaultOutputHooks, runProcess)
 
 parseModuleName :: ReadP r String
-parseModuleName = munch1 (\c -> isAlphaNum c || c == '.' || c == '/')
+parseModuleName = munch1 (\c -> isAlphaNum c || c == '.'
+                                || c == '-'  || c == '/')
 
 parseLine :: String -> Maybe (String, String)
 parseLine l = case [ r | (r,rest) <- readP_to_S parser l, all isSpace rest] of

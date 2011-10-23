@@ -5,7 +5,7 @@
 module GHC.ParMake.BuildPlan
        (new, ready, building, completed, size
        , numCompleted, markCompleted, numBuilding, hasBuilding
-       , markReadyAsBuilding, BuildPlan, Target, TargetId, targetId, depends)
+       , markReadyAsBuilding, BuildPlan, Target(..), TargetId, targetId, depends)
        where
 
 import qualified Data.Array as Array
@@ -26,18 +26,35 @@ import GHC.ParMake.Common (appendMap, uniq)
 
 type TargetId = FilePath
 data Target = TargetModule TargetId [TargetId]
+            | TargetBootModule TargetId [TargetId]
             | TargetInterface TargetId TargetId
+            | TargetBootInterface TargetId TargetId
             deriving (Show,Eq)
 
 -- | Given a Target, return its ID.
 targetId :: Target -> TargetId
-targetId (TargetModule    tId _ ) = tId
-targetId (TargetInterface tId _ ) = tId
+targetId (TargetModule        tId _) = tId
+targetId (TargetBootModule    tId _) = tId
+targetId (TargetInterface     tId _) = tId
+targetId (TargetBootInterface tId _) = tId
 
 -- | Given a Target, return its dependencies.
 depends :: Target -> [TargetId]
-depends (TargetModule _ deps) = deps
-depends (TargetInterface _ d) = [d]
+depends (TargetModule        _ deps) = deps
+depends (TargetBootModule    _ deps) = deps
+depends (TargetInterface     _ d   ) = [d]
+depends (TargetBootInterface _ d   ) = [d]
+
+-- | Is this Target an interface?
+isInterface :: Target -> Bool
+isInterface (TargetInterface     _ _) = True
+isInterface (TargetBootInterface _ _) = True
+isInterface _                         = False
+
+sourceExts, interfaceExts, objExts :: [String]
+sourceExts    = [".hs", ".lhs", ".hs-boot", ".lhs-boot"]
+interfaceExts = [".hi", ".hi-boot"]
+objExts       = [".o", ".o-boot"]
 
 -- | A graph of all dependencies between targets.
 data BuildPlan = BuildPlan {
@@ -91,16 +108,15 @@ new deps = plan
                  . zip [0..] $ targets
       where
         -- Each '.o' node has an additional dependency on a '.hs' node which is
-        -- not in the graph
+        -- not in the graph.
         countNumDeps t = let numDeps = length . depends $ t
                          in if not . isInterface $ t
                             then numDeps - 1 else numDeps
-        isInterface (TargetInterface _ _) = True
-        isInterface _                     = False
+
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
       where hasSingleSourceDep (_,t) = case depends t of
-              [d] -> let ext = takeExtension d in ext == ".hs"
+              [d] -> (takeExtension d) `elem` sourceExts
               _   -> False
     buildingSet = IntSet.empty
 
@@ -112,7 +128,7 @@ new deps = plan
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
-size = (+) 1 . snd . Array.bounds . planGraph
+size = (+) 1 . snd . Array.bounds . planGraphRev
 
 -- | Given a list of (target, dependency) pairs, produce a list of Targets. Note
 -- that we need to make all implicit *.hi -> *.o dependencies explicit.
@@ -120,34 +136,49 @@ depsToTargets :: [(TargetId, TargetId)] -> [Target]
 depsToTargets deps = interfaceTargets {- ++ -} (moduleTargets deps)
   where
     -- [(A.o,B.hi),(A.o,C.hi),...] =>
-    -- [TargetInterface B.hi B.hs, TargetInterface C.hu C.hs] ++ rest
+    -- [TargetInterface B.hi B.hs, TargetInterface C.hi C.hs] ++ rest
     interfaceTargets :: [Target] -> [Target]
     interfaceTargets = appendMap mkInterfaceTarget
-                       (uniq . sort . filter isInterface . flatten $ deps)
+                       (uniq . sort . filter isInterfaceTarget . flatten $ deps)
+      where
+        isInterfaceTarget tId = takeExtension tId `elem` interfaceExts
+
+    -- B.hi => TargetInterface B.hi B.o
+    -- B.hi-boot -> TargetBootInterface B.hi-boot B.o-boot
+    mkInterfaceTarget :: TargetId -> Target
+    mkInterfaceTarget tId = assert (takeExtension tId `elem` interfaceExts) ret
+      where
+        ret = if isPlainInterface tId
+              then TargetInterface tId (replaceExtension tId ".o")
+              else TargetBootInterface tId (replaceExtension tId ".o-boot")
+        isPlainInterface = (==) ".hi" . takeExtension
 
     -- [(A.o,A.hs),(A.o,B.hi),(B.o,B.hs)] =>
     -- [TargetModule A.o [A.hs,B.hi], TargetModule B.o [B.hs]]
     moduleTargets :: [(TargetId, TargetId)] -> [Target]
-    moduleTargets = map (\l -> TargetModule (fst . head $ l) (map snd l)) .
+    moduleTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
                     groupBy (\a b -> fst a == fst b)
 
-    -- B.hi => TargetInterface B.hi B.o
-    mkInterfaceTarget :: TargetId -> Target
-    mkInterfaceTarget tId = TargetInterface tId (replaceExtension tId ".o")
-
-    isInterface :: TargetId -> Bool
-    isInterface tId = let ext = takeExtension tId
-                      in ext == ".hi"
+    -- A.o deps => TargetModule A.o deps
+    -- A.o-boot deps => TargetModule A.o-boot deps
+    mkModuleTarget :: TargetId -> [TargetId] -> Target
+    mkModuleTarget tId tDeps = assert (takeExtension tId `elem` objExts) ret
+      where
+        ret = if isPlainModule tId
+              then TargetModule tId tDeps
+              else TargetBootModule tId tDeps
+        isPlainModule = (==) ".o" . takeExtension
 
     -- [(a,b),(c,d)] => [a,b,c,d]
     flatten :: [(TargetId, TargetId)] -> [TargetId]
     flatten l = flatten' l []
       where
         flatten' []           accum = accum
-        flatten' ((s1,s2):ss) accum = flatten' ss (s1:s2:accum)
+        flatten' ((s1,s2):ss) accum = accum `seq` flatten' ss (s1:s2:accum)
 
 verticesToTargets :: (BuildPlan -> IntSet) -> BuildPlan -> [Target]
-verticesToTargets f plan = map (planTargetOf plan) (IntSet.toList $ f plan)
+verticesToTargets getVertexSet plan =
+  map (planTargetOf plan) (IntSet.toList $ getVertexSet plan)
 
 -- | Get all targets that are ready to be built.
 ready :: BuildPlan -> [Target]
@@ -187,7 +218,7 @@ numBuilding = IntSet.size . planBuilding
 hasBuilding :: BuildPlan -> Bool
 hasBuilding = not . IntSet.null . planBuilding
 
--- | Mark target as built successfully.
+-- | Mark a target as successfully built.
 markCompleted :: BuildPlan -> Target -> BuildPlan
 markCompleted plan target = assert check newPlan
   where
