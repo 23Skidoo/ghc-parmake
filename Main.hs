@@ -2,6 +2,7 @@ module Main
        where
 
 import System.Environment (getArgs)
+import System.Exit (exitWith)
 
 import GHC.ParMake.Common (maybeRead)
 
@@ -19,22 +20,21 @@ getNumJobs ("-j":n:_) =
     Nothing -> error "The argument to '-j' must be an integer!"
 getNumJobs (_:xs)     = getNumJobs xs
 
-getGhcArgs :: [String] -> [String]
-getGhcArgs []          = []
-getGhcArgs ("-j":_:xs) = xs
-getGhcArgs (x:xs)      = x:(getGhcArgs xs)
+getGhcArgs :: [String] -> ([String],[String])
+getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
+                  in (reverse as, reverse fs)
+  where
+    getGhcArgs' [] as fs             = (as, fs)
+    getGhcArgs' ("-j":_:xs) as fs    = getGhcArgs' xs as fs
+    getGhcArgs' (x@('-':_):xs) as fs = getGhcArgs' xs (x:as) fs
+    getGhcArgs' (x:xs) as fs         = getGhcArgs' xs as (x:fs)
 
 -- Program entry point.
 
 main :: IO ()
 main = do args <- getArgs
           let numJobs = getNumJobs args
-          let ghcArgs = getGhcArgs args
-          putStrLn $ "Num jobs: " ++ show numJobs
-          putStrLn $ "GHC args: " ++ show ghcArgs
-          putStrLn "Trying to parse module dependency information..."
-          ds <- Parse.getModuleDeps ghcArgs
-          print ds
-          let plan = BuildPlan.new ds
-          print plan
-          Engine.compileInParallel plan
+          let (ghcArgs, files) = getGhcArgs args
+          plan <- BuildPlan.new `fmap` Parse.getModuleDeps ghcArgs files
+          exitCode <- Engine.compile plan numJobs ghcArgs
+          exitWith exitCode
