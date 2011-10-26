@@ -45,8 +45,8 @@ type ControlChan = Chan ControlMessage
 controlThread :: OutputHooks -> ControlChan -> WorkerChan -> IO ()
 controlThread = undefined
 
-compile :: BuildPlan -> Int -> [String] -> IO ExitCode
-compile p _ ghcArgs = E.catch (go p) handler
+compile :: BuildPlan -> Int -> [String] -> String -> IO ExitCode
+compile p _ ghcArgs outputFilename = E.catch (go p) handler
   where
     handler :: ExitCode -> IO ExitCode
     handler e = return e
@@ -88,7 +88,7 @@ compile p _ ghcArgs = E.catch (go p) handler
     doLink plan =
       do let objs = mapMaybe BuildPlan.object $ BuildPlan.completed plan
          putStrLn "Linking..."
-         runGHC (objs ++ ghcArgs)
+         runGHC $ ("-o":outputFilename:(objs ++ ghcArgs))
 
     go :: BuildPlan -> IO ExitCode
     go plan =

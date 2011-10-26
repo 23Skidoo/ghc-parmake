@@ -36,5 +36,5 @@ main = do args <- getArgs
           let numJobs = getNumJobs args
           let (ghcArgs, files) = getGhcArgs args
           plan <- BuildPlan.new `fmap` Parse.getModuleDeps ghcArgs files
-          exitCode <- Engine.compile plan numJobs ghcArgs
+          exitCode <- Engine.compile plan numJobs ghcArgs "a.out"
           exitWith exitCode
