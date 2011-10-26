@@ -6,9 +6,9 @@ module GHC.ParMake.Engine
 import Control.Exception as E (catch, throw)
 import Control.Concurrent (readChan, writeChan, Chan)
 import Control.Monad (foldM, forever, unless)
+import Data.Maybe (mapMaybe)
 import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
-import System.FilePath (replaceExtension)
 
 import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
@@ -76,17 +76,17 @@ compile p _ ghcArgs = E.catch (go p) handler
     doCompile :: BuildPlan -> Target -> IO BuildPlan
     doCompile plan target =
       do let tId   = BuildPlan.targetId target
-         let tSrcId = replaceExtension tId ".hs" -- HACK
+         let tSrc  = BuildPlan.source target
          let tDeps = BuildPlan.depends target
          let plan' = BuildPlan.markCompleted plan target
          isUpToDate <- upToDateCheck tId tDeps
          unless isUpToDate (putStrLn tId
-                            >> runGHC ("-c":tSrcId:ghcArgs))
+                            >> runGHC ("-c":tSrc:ghcArgs))
          return plan'
 
     doLink :: BuildPlan -> IO ()
     doLink plan =
-      do let objs = map BuildPlan.targetId $ BuildPlan.completed plan
+      do let objs = mapMaybe BuildPlan.object $ BuildPlan.completed plan
          putStrLn "Linking..."
          runGHC (objs ++ ghcArgs)
 

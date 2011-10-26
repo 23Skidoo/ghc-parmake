@@ -5,7 +5,8 @@
 module GHC.ParMake.BuildPlan
        (new, ready, building, completed, size
        , numCompleted, markCompleted, numBuilding, hasBuilding
-       , markReadyAsBuilding, BuildPlan, Target(..), TargetId, targetId, depends)
+       , markReadyAsBuilding, BuildPlan
+       , Target, TargetId, targetId, depends, source, object)
        where
 
 import qualified Data.Array as Array
@@ -24,16 +25,30 @@ import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
 
 type TargetId = FilePath
-data Target = Target TargetId [TargetId]
+data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
+              FilePath         -- ^ Source (e.g. 'Main.hs')
+              [TargetId]       -- ^ Dependencies (e.g. 'A.hi', 'B.hi')
             deriving (Show,Eq)
 
 -- | Given a Target, return its ID.
 targetId :: Target -> TargetId
-targetId (Target tId _) = tId
+targetId (Target tId _ _) = tId
 
 -- | Given a Target, return its dependencies.
 depends :: Target -> [TargetId]
-depends (Target _ deps) = deps
+depends (Target _ _ deps) = deps
+
+-- | Given a Target, return the name of the source file from which it can be
+-- produced.
+source :: Target -> FilePath
+source (Target _ tSrc _) = tSrc
+
+-- | Given a Target, return the name of the object file produced from it that
+-- should be fed to the linker.
+object :: Target -> Maybe FilePath
+object (Target tId _ _) = case takeExtension tId
+                          of ".o-boot" -> Nothing
+                             _         -> Just tId
 
 sourceExts, interfaceExts, objExts :: [String]
 sourceExts    = [".hs", ".lhs", ".hs-boot", ".lhs-boot"]
@@ -129,11 +144,17 @@ depsToTargets :: [(TargetId, TargetId)] -> [Target]
 depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
                 groupBy ((==) `on` fst)
   where
-    mkModuleTarget tId deps = assert check (Target tId deps)
+    mkModuleTarget tId tDeps = assert check (Target tId tSrc tDeps)
       where
+        tSrc = case tDeps
+               of [s] -> s
+                  _   -> replaceExtension tId ".hs"
+
         check = (takeExtension tId `elem` objExts)
-                && (length deps == 1
-                    || or [ takeExtension d `elem` interfaceExts | d <- deps ])
+                && (length tDeps == 1
+                    || or [ takeExtension d `elem` interfaceExts | d <- tDeps ])
+                && (tSrc `elem` tDeps)
+
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
