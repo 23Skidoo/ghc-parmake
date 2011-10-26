@@ -69,7 +69,8 @@ compile p _ ghcArgs = E.catch (go p) handler
       do tModTime <- getModificationTime tId
          foldM (\c depId -> if not c then return c
                             else do depModTime <- getModificationTime depId
-                                    return $ depModTime < tModTime
+                                    -- TOFIX: Is this correct? How GHC does this?
+                                    return $ depModTime <= tModTime
                ) True tDeps
 
     doCompile :: BuildPlan -> Target -> IO BuildPlan
