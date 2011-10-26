@@ -8,16 +8,16 @@ TODO:
 * Verbose output a-la cabal-install/ suppport for the -v option
 
 * Serial compilation (feature parity with 'ghc --make'):
-    * Target should know the name of its source
     * Guess output filename (ghc --make Main.hs => ./Main)
     * Support -o option
     * Relink only when something has changed
-    * Support building libraries
-    * Add functional tests (HUnit).
-    * Tests with .lhs/.lhs-boot
 
+* Add functional tests (HUnit).
+* Tests with .lhs/.lhs-boot
 * Parallel compilation
 * Be able to build itself & simple test projects
+
+* Support building libraries
 * Test on some large project (e.g. Darcs/Agda)
 
 * Later: Nicer user interface (see
