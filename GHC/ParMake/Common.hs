@@ -1,9 +1,16 @@
 -- Misc. small useful functions.
 
-module GHC.ParMake.Common (appendMap, maybeRead, pathToMaybe, uniq)
+module GHC.ParMake.Common (andM, appendMap, maybeRead, pathToMaybe, uniq)
        where
 
 import Data.Maybe (listToMaybe)
+
+andM :: Monad m => [m Bool] -> m Bool
+andM l = go l True
+  where
+    go [] r     = return r
+    go (a:as) r = if not r then return r
+                  else a >>= (\ret -> go as (r && ret))
 
 maybeRead :: Read a => String -> Maybe a
 maybeRead = fmap fst . listToMaybe . reads

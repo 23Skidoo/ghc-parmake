@@ -5,13 +5,14 @@ module GHC.ParMake.Engine
 
 import Control.Exception as E (catch, throw)
 import Control.Concurrent (readChan, writeChan, Chan)
-import Control.Monad (foldM, forever, unless)
+import Control.Monad (foldM, forever, liftM, unless)
 import Data.Maybe (mapMaybe)
 import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
 
 import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
+import GHC.ParMake.Common (andM)
 import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..), runProcess)
 
 -- One-way controller/worker -> logger communication.
@@ -67,11 +68,8 @@ compile p _ ghcArgs outputFilename = E.catch (go p) handler
     checkModificationTime :: FilePath -> [FilePath] -> IO Bool
     checkModificationTime tId tDeps =
       do tModTime <- getModificationTime tId
-         foldM (\c depId -> if not c then return c
-                            else do depModTime <- getModificationTime depId
-                                    -- TOFIX: Is this correct? How GHC does this?
-                                    return $ depModTime <= tModTime
-               ) True tDeps
+         -- TOFIX: Is this check correct? How GHC does this?
+         andM [ liftM (tModTime >=) (getModificationTime depId) | depId <- tDeps]
 
     doCompile :: BuildPlan -> Target -> IO BuildPlan
     doCompile plan target =
