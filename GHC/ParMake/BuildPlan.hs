@@ -100,6 +100,7 @@ new deps = plan
     targetIdToVertex   = binarySearch 0 topBound
     vertexToTargetId v = targetTable ! v
 
+    -- TODO: This doesn't work well when -odir != -hidir.
     graph = Array.listArray bounds
             [ [ v | Just v <- map targetIdToVertex
                               . map interfaceToObj $ depends target]
