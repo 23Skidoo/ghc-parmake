@@ -3,10 +3,9 @@
 -- somehow.
 
 module GHC.ParMake.BuildPlan
-       (new, ready, building, completed, size, countReachable
-       , numCompleted, markCompleted, markAllCompleted
-       , markAllBuilding, markReadyAsBuilding
-       , numBuilding, hasBuilding, processInitial
+       (new, ready, building, completed, size
+       , numCompleted, markCompleted
+       , markReadyAsBuilding, numBuilding, hasBuilding
        , BuildPlan, Target, TargetId, targetId, depends, source, object)
        where
 
@@ -15,19 +14,15 @@ import qualified Data.Graph as Graph
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Control.Exception (assert)
-import Control.Monad (filterM)
 import Data.Array ((!))
 import Data.Graph (Graph)
 import Data.Function (on)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
-import Data.List (find, foldl', groupBy, sort, sortBy)
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.List (find, groupBy, sortBy)
+import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
-
-import GHC.ParMake.Common (uniq)
-import GHC.ParMake.Util (upToDateCheck)
 
 type TargetId = FilePath
 data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
@@ -165,9 +160,6 @@ depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
 size :: BuildPlan -> Int
 size = (+) 1 . snd . Array.bounds . planGraphRev
 
-targetsToVertices :: BuildPlan -> [Target] -> [Int]
-targetsToVertices p = mapMaybe (planVertexOf p) . map targetId
-
 verticesToTargets :: BuildPlan -> IntSet -> [Target]
 verticesToTargets plan vertices =
   map (planTargetOf plan) (IntSet.toList vertices)
@@ -203,23 +195,6 @@ markReadyAsBuilding plan = plan {
   planReady = IntSet.empty,
   planBuilding = planBuilding plan `IntSet.union` planReady plan
   }
-
-markAllBuilding :: BuildPlan -> [Target] -> BuildPlan
-markAllBuilding plan ts = assert check plan'
-  where
-    check = vertices `IntSet.isSubsetOf` planReady plan
-    vertices = IntSet.fromList $ targetsToVertices plan ts
-    plan' = plan {
-      planReady = planReady plan `IntSet.difference` vertices,
-      planBuilding = planBuilding plan `IntSet.union` vertices
-      }
-
--- | Count all targets reachable from these.
-countReachable :: BuildPlan -> [Target] -> Int
-countReachable p ts =
-  let vertices = targetsToVertices p ts
-      reachable = map (Graph.reachable (planGraphRev p)) vertices
-  in length . uniq . sort . concat $ reachable
 
 -- | How many targets are we building currently?
 numBuilding :: BuildPlan -> Int
@@ -258,28 +233,6 @@ markCompleted plan target = assert check newPlan
       planReady = newReady,
       planNumDeps = newNumDeps
       }
-
-markAllCompleted :: BuildPlan -> [Target] -> BuildPlan
-markAllCompleted plan targets = foldl' (\p t -> markCompleted p t) plan targets
-
--- | Process the graph so that only non-up-to-date targets are left in the
--- 'ready' state.
-processInitial :: BuildPlan -> IO BuildPlan
-processInitial plan = go plan IntSet.empty
-  where
-    go p cache =
-      do let rdy = planReady p
-         let rdy' = rdy `IntSet.difference` cache
-         let targets = verticesToTargets p rdy'
-         filteredTargets <- filterM (\t -> upToDateCheck (targetId t)
-                                           (depends t)) targets
-         let rdy'' = IntSet.fromList $ targetsToVertices p filteredTargets
-         if IntSet.null rdy''
-           then return p
-           else do let p'  = markAllBuilding p filteredTargets
-                   let p'' = markAllCompleted p' filteredTargets
-                   go p'' (rdy `IntSet.difference` rdy'')
-
 
 -- TODO: In the future, this can be used to implement '-keep-going' (aka 'make
 -- -k'), but for now we just abort (like GHC does).
