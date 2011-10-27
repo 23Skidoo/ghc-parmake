@@ -75,13 +75,10 @@ compile v p _numJobs ghcArgs outputFilename = E.catch (go 1 p) handler
          let tSrc  = BuildPlan.source target
          let tDeps = BuildPlan.depends target
          let plan' = BuildPlan.markCompleted plan target
-         -- TODO: This is buggy when -odir is specified
-         let tName = slashesToDots . dropExtension $ tId
+         let tName = slashesToDots . dropExtension $ tSrc
          let msg = "[" ++ show curNum ++ " of "++ totNum ++ "] Compiling "
                    ++ tName
-                   ++ (let l = length tName
-                       in if l < 25 then (replicate (25 - l) ' ')
-                          else ('\n':replicate 54 ' '))
+                   ++ replicate (16 - length tName) ' '
                    ++ " ( " ++ tSrc ++ ", " ++ tId ++ " )\n"
          isUpToDate <- upToDateCheck tId tDeps
          unless isUpToDate $ do noticeRaw defaultOutputHooks v msg
