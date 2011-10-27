@@ -4,7 +4,7 @@ module Main
 import Control.Monad (liftM, when)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
-import System.Exit (exitSuccess, exitWith)
+import System.Exit (exitFailure, exitSuccess, exitWith)
 import System.FilePath (dropExtension)
 
 import GHC.ParMake.Common (maybeRead)
@@ -115,6 +115,8 @@ main =
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps ghcArgs files
+     when (null deps) $ exitFailure
+
      debug' v ("Parsed dependencies:\n" ++ show deps)
      let plan = BuildPlan.new deps
      debug' v ("Produced a build plan:\n" ++ show plan)
