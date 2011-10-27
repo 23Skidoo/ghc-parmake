@@ -1,7 +1,8 @@
 -- Various utility functions for interfacing with the outside world. Most of
 -- this is taken from Distribution.Simple.Utils.
 
-module GHC.ParMake.Util (runProcess, defaultOutputHooks, OutputHooks(..)
+module GHC.ParMake.Util (runProcess, upToDateCheck
+                        , defaultOutputHooks, OutputHooks(..)
                         , warn, notice, info, debug
                         , warn', notice', noticeRaw, info', debug'
                         , Verbosity, intToVerbosity
@@ -9,12 +10,15 @@ module GHC.ParMake.Util (runProcess, defaultOutputHooks, OutputHooks(..)
        where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, liftM, when)
 import qualified Control.Exception as Exception
+import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
 import System.IO ( hClose, hGetContents, hFlush, hPutStr, hPutStrLn
                    , hSetBinaryMode, stderr, stdout)
 import System.Process (runInteractiveProcess, waitForProcess)
+
+import GHC.ParMake.Common (andM)
 
 -- Copied from Distribution.Verbosity.
 data Verbosity = Silent | Normal | Verbose | Deafening
@@ -181,3 +185,14 @@ wrapLine width = wrap 0 []
              in wrap col' (w:line) ws
         wrap _ []   [] = []
         wrap _ line [] = [reverse line]
+
+-- | Is this target up to date w.r.t. its dependencies?
+upToDateCheck :: FilePath -> [FilePath] -> IO Bool
+upToDateCheck tId tDeps =
+  do tExists <- doesFileExist tId
+     if not tExists
+       then return False
+       else do tModTime <- getModificationTime tId
+               -- TODO: Is this check correct? How GHC does this?
+               andM [ liftM (tModTime >=) (getModificationTime depId)
+                    | depId <- tDeps]

@@ -5,18 +5,16 @@ module GHC.ParMake.Engine
 
 import Control.Exception as E (catch, throw)
 import Control.Concurrent (readChan, writeChan, Chan)
-import Control.Monad (filterM, foldM, forever, liftM, unless)
-import Data.List ((\\))
+import Control.Monad (foldM, forever, unless)
 import Data.Maybe (mapMaybe)
-import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
 import System.FilePath (dropExtension)
 
 import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
-import GHC.ParMake.Common (andM)
-import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..), runProcess,
-                         Verbosity, debug', notice', noticeRaw)
+import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..)
+                         , runProcess, upToDateCheck
+                         , Verbosity, debug', notice', noticeRaw)
 
 -- One-way controller/worker -> logger communication.
 data LogTask = LogStr String | LogStrErr String
@@ -53,50 +51,15 @@ type ControlChan = Chan ControlMessage
 controlThread :: OutputHooks -> ControlChan -> WorkerChan -> IO ()
 controlThread = undefined
 
--- | Is this target up to date w.r.t. its dependencies?
-upToDateCheck :: FilePath -> [FilePath] -> IO Bool
-upToDateCheck tId tDeps =
-  do tExists <- doesFileExist tId
-     if not tExists
-       then return False
-       else do tModTime <- getModificationTime tId
-               -- TOFIX: Is this check correct? How GHC does this?
-               andM [ liftM (tModTime >=) (getModificationTime depId)
-                    | depId <- tDeps]
-
 -- | Given a BuildPlan, perform the compilation.
 compile :: Verbosity -> BuildPlan -> Int -> [String] -> String -> IO ExitCode
-compile v plan n as ofn =
-  E.catch (processInitial plan []
-           >>= \plan' -> compile' v plan' n (countTotNum plan') as ofn) handler
+compile v p _numJobs ghcArgs outputFilename = E.catch (go 1 p) handler
   where
     handler :: ExitCode -> IO ExitCode
     handler e = return e
 
-    -- Process the graph so that only non-up-to-date targets are left in 'ready'.
-    -- TODO: This can be optimised a bit if moved to BuildPlan.
-    processInitial :: BuildPlan -> [Target] -> IO BuildPlan
-    processInitial p cache =
-      do let rdy = BuildPlan.ready p
-         let rdy' = filter (\t -> not $ t `elem` cache) rdy
-         rdy'' <- filterM
-                  (\t -> upToDateCheck (BuildPlan.targetId t)
-                         (BuildPlan.depends t)) rdy'
-         case rdy'' of
-           [] -> return p
-           _  -> do let p'  = BuildPlan.markAllBuilding p rdy''
-                    let p'' = BuildPlan.markAllCompleted p' rdy''
-                    processInitial p'' (rdy \\ rdy'')
-
-    countTotNum :: BuildPlan -> Int
-    countTotNum p = BuildPlan.countReachable p (BuildPlan.ready p)
-
-
--- | Actual implementation of `compile`.
-compile' :: Verbosity -> BuildPlan -> Int -> Int -> [String] -> String
-            -> IO ExitCode
-compile' v p _numJobs totNum ghcArgs outputFilename = go 1 p
-  where
+    totNum :: String
+    totNum = show $ BuildPlan.size p
 
     runGHC :: [String] -> IO ()
     runGHC args =
@@ -114,19 +77,16 @@ compile' v p _numJobs totNum ghcArgs outputFilename = go 1 p
          let plan' = BuildPlan.markCompleted plan target
          -- TODO: This is buggy when -odir is specified
          let tName = slashesToDots . dropExtension $ tId
-         let msg = "[" ++ show curNum ++ " of (at most) "
-                   ++ show totNum ++ "] Compiling "
+         let msg = "[" ++ show curNum ++ " of "++ totNum ++ "] Compiling "
                    ++ tName
                    ++ (let l = length tName
                        in if l < 25 then (replicate (25 - l) ' ')
                           else ('\n':replicate 54 ' '))
                    ++ " ( " ++ tSrc ++ ", " ++ tId ++ " )\n"
          isUpToDate <- upToDateCheck tId tDeps
-         if isUpToDate
-           then return (curNum, plan')
-           else do noticeRaw defaultOutputHooks v msg
-                   runGHC ("-c":tSrc:ghcArgs)
-                   return (curNum + 1, plan')
+         unless isUpToDate $ do noticeRaw defaultOutputHooks v msg
+                                runGHC ("-c":tSrc:ghcArgs)
+         return (curNum + 1, plan')
 
     doLink :: BuildPlan -> IO ()
     doLink plan =
