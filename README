@@ -5,20 +5,19 @@ Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
 TODO:
 
-* Verbose output a-la cabal-install/ suppport for the -v option
-
-* Serial compilation (feature parity with 'ghc --make'):
-    * Guess output filename (ghc --make Main.hs => ./Main)
-    * Support -o option
-    * Relink only when something has changed
-
+* Perform the link step only when we've compiled something
 * Add functional tests (HUnit).
 * Tests with .lhs/.lhs-boot
+* Test -odir & -main-is
 * Parallel compilation
 * Be able to build itself & simple test projects
 
 * Support building libraries
 * Test on some large project (e.g. Darcs/Agda)
 
-* Later: Nicer user interface (see
+Later:
+
+* Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
+* Support -hisuf etc
+* Test on Windows
