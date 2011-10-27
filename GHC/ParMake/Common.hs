@@ -1,4 +1,4 @@
--- Misc. small useful functions.
+-- Misc. small useful pure functions.
 
 module GHC.ParMake.Common (andM, appendMap, maybeRead, pathToMaybe, uniq)
        where
@@ -28,6 +28,7 @@ appendMap f l rest = go l
     go (x:xs) = f x : go xs
 
 -- | Remove consecutive duplicate elements from a list.
+-- Example: uniq [3,3,3] = [3].
 uniq :: Eq a => [a] -> [a]
 uniq [] = []
 uniq [x] = [x]
