@@ -13,7 +13,8 @@ import System.Exit (ExitCode(..))
 import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.Common (andM)
-import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..), runProcess)
+import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..), runProcess,
+                         Verbosity, debug', notice')
 
 -- One-way controller/worker -> logger communication.
 data LogTask = LogStr String | LogStrErr String
@@ -50,15 +51,15 @@ type ControlChan = Chan ControlMessage
 controlThread :: OutputHooks -> ControlChan -> WorkerChan -> IO ()
 controlThread = undefined
 
-compile :: BuildPlan -> Int -> [String] -> String -> IO ExitCode
-compile p _ ghcArgs outputFilename = E.catch (go p) handler
+compile :: Verbosity -> BuildPlan -> Int -> [String] -> String -> IO ExitCode
+compile v p _ ghcArgs outputFilename = E.catch (go p) handler
   where
     handler :: ExitCode -> IO ExitCode
     handler e = return e
 
     runGHC :: [String] -> IO ()
     runGHC args =
-      do print $ "ghc":args
+      do debug' v $ show ("ghc":args)
          exitCode <- runProcess defaultOutputHooks Nothing "ghc" args
          unless (exitCode == ExitSuccess) (throw exitCode)
 
@@ -82,14 +83,14 @@ compile p _ ghcArgs outputFilename = E.catch (go p) handler
          let tDeps = BuildPlan.depends target
          let plan' = BuildPlan.markCompleted plan target
          isUpToDate <- upToDateCheck tId tDeps
-         unless isUpToDate (putStrLn tId
+         unless isUpToDate (notice' v ("Compiling " ++ tId)
                             >> runGHC ("-c":tSrc:ghcArgs))
          return plan'
 
     doLink :: BuildPlan -> IO ()
     doLink plan =
       do let objs = mapMaybe BuildPlan.object $ BuildPlan.completed plan
-         putStrLn "Linking..."
+         notice' v "Linking..."
          runGHC $ ("-o":outputFilename:(objs ++ ghcArgs))
 
     go :: BuildPlan -> IO ExitCode
@@ -98,7 +99,6 @@ compile p _ ghcArgs outputFilename = E.catch (go p) handler
       in if null rdy
          then
            do doLink plan
-              putStrLn "DONE"
               return ExitSuccess
          else
            do let plan' = BuildPlan.markReadyAsBuilding plan
