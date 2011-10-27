@@ -3,10 +3,12 @@ integrate it with 'cabal build' eventually.
 
 Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
+Known bugs:
+      * Build fails when -odir != -hidir
+
 TODO:
 
-* Support -odir -hidir
-* Add functional tests (HUnit).
+* Implement functional tests (HUnit).
 * Tests with .lhs/.lhs-boot
 * Tests with -odir -hidir
 * Parallel compilation
@@ -18,9 +20,8 @@ TODO:
 Later:
 
 * Support -odir != -hidir
-* Parse -odir and print prettier output
 * Support -hisuf/-osuf/etc (needed for building profiling versions)
-* Cache timestamp checks
 * Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
+* Cache timestamp checks
 * Test on Windows
