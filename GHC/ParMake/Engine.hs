@@ -21,8 +21,12 @@ type LogChan = Chan LogTask
 
 logThreadOutputHooks :: String -> LogChan -> OutputHooks
 logThreadOutputHooks prefix logChan = OutputHooks {
+  -- TODO: Fix these
+  putStrHook      = undefined,
   putStrLnHook    = \msg -> writeChan logChan $ LogStr (prefix ++ msg),
-  putStrLnErrHook = \msg -> writeChan logChan $ LogStrErr (prefix ++ msg)
+  putStrErrHook   = undefined,
+  putStrLnErrHook = \msg -> writeChan logChan $ LogStrErr (prefix ++ msg),
+  flushStdOutHook = undefined
   }
 
 logThread :: LogChan -> IO ()
