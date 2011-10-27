@@ -3,10 +3,11 @@
 -- somehow.
 
 module GHC.ParMake.BuildPlan
-       (new, ready, building, completed, size
-       , numCompleted, markCompleted, numBuilding, hasBuilding
-       , markReadyAsBuilding, BuildPlan
-       , Target, TargetId, targetId, depends, source, object)
+       (new, ready, building, completed, size, countReachable
+       , numCompleted, markCompleted, markAllCompleted
+       , markAllBuilding, markReadyAsBuilding
+       , numBuilding, hasBuilding
+       ,BuildPlan, Target, TargetId, targetId, depends, source, object)
        where
 
 import qualified Data.Array as Array
@@ -19,16 +20,21 @@ import Data.Graph (Graph)
 import Data.Function (on)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
-import Data.List (groupBy, sortBy)
-import Data.Maybe (fromMaybe)
+import Data.List (find, foldl', groupBy, sort, sortBy)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
+
+import GHC.ParMake.Common (uniq)
 
 type TargetId = FilePath
 data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
               FilePath         -- ^ Source (e.g. 'Main.hs')
               [TargetId]       -- ^ Dependencies (e.g. 'A.hi', 'B.hi')
-            deriving (Show,Eq)
+            deriving (Show)
+
+instance Eq Target where
+  (==) = (==) `on` targetId
 
 -- | Given a Target, return its ID.
 targetId :: Target -> TargetId
@@ -86,6 +92,9 @@ instance Show BuildPlan where
       targetIds         = map targetId targets
       numberedTargetIds = (zip [(0::Int)..] targetIds)
       topBound          = snd . Array.bounds . planGraph $ p
+
+toVertices :: BuildPlan -> [Target] -> [Int]
+toVertices p ts = mapMaybe (planVertexOf p) $ map targetId ts
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
@@ -146,15 +155,12 @@ depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
   where
     mkModuleTarget tId tDeps = assert check (Target tId tSrc tDeps)
       where
-        tSrc = case tDeps
-               of [s] -> s
-                  _   -> replaceExtension tId ".hs"
+        tSrc = fromMaybe (error "No source file in dependencies!")
+               $ find ((==) ".hs" . takeExtension) tDeps
 
         check = (takeExtension tId `elem` objExts)
                 && (length tDeps == 1
                     || or [ takeExtension d `elem` interfaceExts | d <- tDeps ])
-                && (tSrc `elem` tDeps)
-
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
@@ -196,6 +202,23 @@ markReadyAsBuilding plan = plan {
   planBuilding = planBuilding plan `IntSet.union` planReady plan
   }
 
+markAllBuilding :: BuildPlan -> [Target] -> BuildPlan
+markAllBuilding plan ts = assert check plan'
+  where
+    check = vertices `IntSet.isSubsetOf` planReady plan
+    vertices = IntSet.fromList $ toVertices plan ts
+    plan' = plan {
+      planReady = planReady plan `IntSet.difference` vertices,
+      planBuilding = planBuilding plan `IntSet.union` vertices
+      }
+
+-- | Count all targets reachable from these.
+countReachable :: BuildPlan -> [Target] -> Int
+countReachable p ts =
+  let vertices = toVertices p ts
+      reachable = map (Graph.reachable (planGraphRev p)) vertices
+  in length . uniq . sort . concat $ reachable
+
 -- | How many targets are we building currently?
 numBuilding :: BuildPlan -> Int
 numBuilding = IntSet.size . planBuilding
@@ -233,6 +256,9 @@ markCompleted plan target = assert check newPlan
       planReady = newReady,
       planNumDeps = newNumDeps
       }
+
+markAllCompleted :: BuildPlan -> [Target] -> BuildPlan
+markAllCompleted plan targets = foldl' (\p t -> markCompleted p t) plan targets
 
 -- TODO: In the future, this can be used to implement '-keep-going' (aka 'make
 -- -k'), but for now we just abort (like GHC does).

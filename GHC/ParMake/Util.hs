@@ -3,7 +3,7 @@
 
 module GHC.ParMake.Util (runProcess, defaultOutputHooks, OutputHooks(..)
                         , warn, notice, info, debug
-                        , warn', notice', info', debug'
+                        , warn', notice', noticeRaw, info', debug'
                         , Verbosity, intToVerbosity
                         , silent, normal, verbose, deafening)
        where
@@ -63,11 +63,14 @@ warn' = warn defaultOutputHooks
 -- This is for the ordinary helpful status messages that users see. Just
 -- enough information to know that things are working but not floods of detail.
 --
-notice :: OutputHooks -> Verbosity -> String -> IO ()
-notice outHooks verbosity msg =
+noticeRaw :: OutputHooks -> Verbosity -> String -> IO ()
+noticeRaw outHooks verbosity msg =
   when (verbosity >= normal) $ do
     flushStdOutHook outHooks
-    putStrHook outHooks (wrapText msg)
+    putStrHook outHooks msg
+
+notice :: OutputHooks -> Verbosity -> String -> IO ()
+notice h v msg = noticeRaw h v (wrapText msg)
 
 notice' :: Verbosity -> String -> IO ()
 notice' = notice defaultOutputHooks

@@ -114,10 +114,12 @@ main =
      when (printUsage args)   $ usage >> exitSuccess
 
      debug' v "Running ghc -M..."
-     plan <- BuildPlan.new `fmap` Parse.getModuleDeps ghcArgs files
+     deps <- Parse.getModuleDeps ghcArgs files
+     debug' v ("Parsed dependencies:\n" ++ show deps)
+     let plan = BuildPlan.new deps
      debug' v ("Produced a build plan:\n" ++ show plan)
 
-     debug' v $ "Compilng with " ++ (show . numJobs $ args) ++ " jobs..."
+     debug' v "Building..."
      let ofn = guessOutputFilename (outputFilename args) files
      exitCode <- Engine.compile v plan (numJobs args) ghcArgs ofn
      exitWith exitCode

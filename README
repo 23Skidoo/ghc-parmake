@@ -5,19 +5,22 @@ Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
 TODO:
 
-* Perform the link step only when we've compiled something
+* Support -odir -hidir
 * Add functional tests (HUnit).
 * Tests with .lhs/.lhs-boot
-* Test -odir & -main-is
+* Tests with -odir -hidir
 * Parallel compilation
-* Be able to build itself & simple test projects
+* Be able to build itself (in parallel, with -odir -hidir)
 
-* Support building libraries
+* Support building libraries (just -main-is?)
 * Test on some large project (e.g. Darcs/Agda)
 
 Later:
 
+* Support -odir != -hidir
+* Parse -odir and print prettier output
+* Support -hisuf/-osuf/etc (needed for building profiling versions)
+* Cache timestamp checks
 * Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
-* Support -hisuf etc
 * Test on Windows
