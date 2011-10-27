@@ -4,13 +4,20 @@ module Main
 import Data.Char
 import Data.List
 import System.FilePath
+import System.Directory
+
 import Test.QuickCheck
-import Test.Framework (Test, defaultMain)
+import Test.HUnit hiding (Test)
+import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
+import Test.Framework.Providers.HUnit (testCase)
 
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.BuildPlan (TargetId)
 import GHC.ParMake.Common (appendMap, uniq)
+
+------------------------------------------------------------------------
+-- Input data generation for QuickCheck.
 
 data DepsList = DepsList [(TargetId, TargetId)]
               deriving Show
@@ -50,6 +57,9 @@ arbitraryName = (listOf . elements $ ['A'..'Z'] ++ ['a'..'z'] ++ ['0'..'9'])
                                   && (length l >= 4)
                                   && (isUpper . head $ l))
 
+------------------------------------------------------------------------
+-- Properties.
+
 pMarkCompleted :: DepsList -> Bool
 pMarkCompleted (DepsList []) = True
 pMarkCompleted (DepsList  l) =
@@ -75,6 +85,14 @@ pAppendMap :: [Int] -> [Int] -> Bool
 pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
 
 ------------------------------------------------------------------------
+-- Unit tests.
+
+mkTestCase :: FilePath -> Assertion
+mkTestCase dirName = do let p = "tests" </> "data" </> dirName
+                        b <- doesFileExist f
+                        assertBool ("File '" ++ f ++ "' doesn't exist!") b
+
+------------------------------------------------------------------------
 -- Test harness
 
 main :: IO ()
@@ -82,13 +100,14 @@ main = defaultMain tests
 
 tests :: [Test]
 tests =
-    [ testProperty "appendMap" pAppendMap
-    , testProperty "markCompleted" pMarkCompleted
-    , testProperty "compile" pCompile
-    -- , testGroup "text"
-    --   [ testProperty "text/strict" pText
-    --   , testProperty "text/lazy" pTextLazy
-    --   , testProperty "rechunk" pRechunk
-    --   , testProperty "text/rechunked" pLazyRechunked
-    --   ]
+    [ testGroup "properties"
+      [ testProperty "appendMap" pAppendMap
+      , testProperty "markCompleted" pMarkCompleted
+      , testProperty "compile" pCompile
+      ]
+    , testGroup "tests"
+      [ testCase dirName (mkTestCase dirName)
+      | dirName <- [ "executable", "executable-lhs"
+                   , "executable-mutrec", "executable-lhs-mutrec"]
+      ]
     ]
