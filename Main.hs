@@ -70,6 +70,9 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
 
     eatOption []           as  = ([], as)
     eatOption (opt:arg:xs) as
+      -- Unlike 'ghc --make', 'ghc -c' for some reason does not include -hidir
+      -- in the interface search path.
+      | opt == "-hidir"        = (xs, ('-':'i':arg):arg:opt:as)
       | opt `elem` optsWithArg = (xs, arg:opt:as)
     eatOption (x:xs) as        = (xs, x:as)
 
