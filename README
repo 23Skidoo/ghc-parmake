@@ -1,27 +1,10 @@
 This is slowly evolving into a parallel wrapper for 'ghc --make'. I plan to
 integrate it with 'cabal build' eventually.
 
-Usage: ghc-parmake -j N MyModule.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
+Usage: ghc-parmake -j N MyProgram.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
-Known bugs:
+Known deficiencies:
+
       * Build fails when -odir != -hidir
-
-TODO:
-
-* Implement functional tests (HUnit).
-* Tests with .lhs/.lhs-boot
-* Tests with -odir -hidir
-* Parallel compilation
-* Be able to build itself (in parallel, with -odir -hidir)
-
-* Support building libraries (just -main-is?)
-* Test on some large project (e.g. Darcs/Agda)
-
-Later:
-
-* Support -odir != -hidir
-* Support -hisuf/-osuf/etc (needed for building profiling versions)
-* Nicer user interface (see
-  http://hackage.haskell.org/trac/hackage/ticket/447 )
-* Cache timestamp checks
-* Test on Windows
+      * -hisuf/-osuf are not supported (needed for building libs for profiling)
+      * Tested only on Linux
