@@ -62,11 +62,12 @@ workerThread outHooks verbosity totNum ghcArgs wch cch
     case task of
       BuildModule curNum target ->
         do exitCode <- buildModule curNum target
-           onSuccess exitCode $ ModuleBuilt target
+           onSuccess exitCode (ModuleCompiled target)
+             (CompileFailed target exitCode)
 
       BuildProgram outputFilename objects ->
         do exitCode <- buildProgram outputFilename objects
-           onSuccess exitCode $ ProgramBuilt
+           onSuccess exitCode (BuildCompleted) (BuildFailed exitCode)
   where
 
     runGHC :: [String] -> IO ExitCode
@@ -74,11 +75,11 @@ workerThread outHooks verbosity totNum ghcArgs wch cch
       do debug outHooks verbosity $ show ("ghc":args)
          runProcess outHooks Nothing "ghc" args
 
-    onSuccess :: ExitCode -> ControlMessage -> IO ()
-    onSuccess exitCode msg =
-      if exitCode /= ExitSuccess
-      then writeChan cch $ BuildFailed exitCode
-      else writeChan cch msg
+    onSuccess :: ExitCode -> ControlMessage -> ControlMessage -> IO ()
+    onSuccess exitCode msgSucc msgFail =
+      if exitCode == ExitSuccess
+      then writeChan cch msgSucc
+      else writeChan cch msgFail
 
     slashesToDots :: String -> String
     slashesToDots = map slashToDot
@@ -116,7 +117,8 @@ workerThread outHooks verbosity totNum ghcArgs wch cch
 
 
 -- One-way worker -> controller communication.
-data ControlMessage = ModuleBuilt Target | BuildFailed ExitCode | ProgramBuilt
+data ControlMessage = ModuleCompiled Target | BuildCompleted
+                    | CompileFailed Target ExitCode | BuildFailed ExitCode
 type ControlChan = Chan ControlMessage
 
 controlThread :: BuildPlan -> FilePath -> ControlChan -> WorkerChan
@@ -140,7 +142,7 @@ controlThread p outputFilename cch wch =
     go plan curNum =
       do msg <- readChan cch
          case msg of
-           ModuleBuilt target ->
+           ModuleCompiled target ->
              do let plan' = BuildPlan.markCompleted plan target
                 let rdy   = BuildPlan.ready plan'
                 curNum'  <- postTasks rdy curNum
@@ -150,10 +152,31 @@ controlThread p outputFilename cch wch =
                                   $ BuildPlan.objects plan''))
                 go plan'' curNum'
 
-           ProgramBuilt  -> return ExitSuccess
+           CompileFailed t c -> waitAndExit (BuildPlan.markCompleted plan t) c
 
-           -- TODO: Wait for all worker threads to finish.
-           BuildFailed c -> return c
+           BuildCompleted  -> return ExitSuccess
+           BuildFailed c   -> return c
+
+
+    -- One of the worker threads encountered an error. Wait for all threads to
+    -- finish.
+    waitAndExit :: BuildPlan -> ExitCode -> IO ExitCode
+    waitAndExit plan exitCode =
+      if BuildPlan.numBuilding plan > 0
+      then
+        do msg <- readChan cch
+           case msg of
+             ModuleCompiled target ->
+               waitAndExit (BuildPlan.markCompleted plan target) exitCode
+
+             CompileFailed target _ ->
+               waitAndExit (BuildPlan.markCompleted plan target) exitCode
+
+             -- Can't happen.
+             BuildCompleted -> return exitCode
+             BuildFailed _  -> return exitCode
+
+      else return exitCode
 
 -- | Given a BuildPlan, perform the compilation.
 compile :: Verbosity -> BuildPlan -> Int -> [String] -> String -> IO ExitCode
