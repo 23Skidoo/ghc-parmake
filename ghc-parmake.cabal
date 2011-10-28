@@ -43,6 +43,7 @@ Test-suite tests
   Build-depends:        base >= 4.0 && < 5,
                         filepath >= 1 && < 2,
                         directory >= 1.1 && < 2,
+                        process >= 1 && < 2,
                         ghc-parmake == 0.1.*,
                         test-framework >= 0.4.1 && < 0.5,
                         test-framework-quickcheck2 >= 0.2.10 && < 0.3,

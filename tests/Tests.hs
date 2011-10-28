@@ -1,10 +1,14 @@
 module Main
        where
 
+import Control.Exception
 import Data.Char
 import Data.List
-import System.FilePath
 import System.Directory
+import System.Exit
+import System.FilePath
+import System.IO
+import System.Process
 
 import Test.QuickCheck
 import Test.HUnit hiding (Test)
@@ -87,10 +91,40 @@ pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
 ------------------------------------------------------------------------
 -- Unit tests.
 
+getExitCode :: FilePath -> [String] -> FilePath -> IO ExitCode
+getExitCode program args workingDir =
+  do bracket (runInteractiveProcess program args (Just workingDir) Nothing)
+       (\(inh, outh, errh, _) -> mapM_ hClose [inh, outh, errh])
+       (\(_,_,_,pid) -> waitForProcess pid)
+
 mkTestCase :: FilePath -> Assertion
-mkTestCase dirName = do let p = "tests" </> "data" </> dirName
-                        b <- doesDirectoryExist p
-                        assertBool ("File '" ++ p ++ "' doesn't exist!") b
+mkTestCase dirName =
+  do t1 <- doesDirectoryExist testDir
+     t2 <- doesFileExist makeProgram
+     assertBool ("Directory '" ++ testDir ++ "' doesn't exist!") t1
+     assertBool ("Executable '" ++ makeProgram ++ "' doesn't exist!") t2
+
+     -- Build the program.
+     curDir <- getCurrentDirectory
+     createDirectory oDir
+     exitCode <- getExitCode (curDir </> makeProgram)
+                 ["Main.hs", "-odir", oDirName, "-hidir", oDirName] testDir
+     assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
+     removeDirectoryRecursive oDir
+
+     -- Check output.
+     testProgramOutput <- readProcess testProgram [] ""
+     referenceOutput <- readFile testFile
+     assertEqual "Program output is wrong!" referenceOutput testProgramOutput
+     removeFile testProgram
+
+  where
+    testDir     = "tests" </> "data" </> dirName
+    oDirName    = "tmp"
+    oDir        = testDir </> oDirName
+    makeProgram = "dist/build/ghc-parmake/ghc-parmake"
+    testProgram = testDir </> "Main"
+    testFile    = testDir </> "OUTPUT"
 
 ------------------------------------------------------------------------
 -- Test harness
@@ -107,7 +141,7 @@ tests =
       ]
     , testGroup "tests"
       [ testCase dirName (mkTestCase dirName)
-      | dirName <- [ "executable", "executable-lhs"
-                   , "executable-mutrec", "executable-lhs-mutrec"]
+      | dirName <- [ "executable" , "executable-lhs"
+                   , "executable-mutrec", "executable-lhs-mutrec" ]
       ]
     ]
