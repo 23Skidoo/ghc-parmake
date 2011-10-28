@@ -6,6 +6,7 @@ import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess, exitWith)
 import System.FilePath (dropExtension)
+import System.IO (hPutStrLn, stderr)
 
 import GHC.ParMake.Common (maybeRead)
 import GHC.ParMake.Util
@@ -103,6 +104,9 @@ guessOutputFilename (Just n) _  = n
 guessOutputFilename Nothing [n] = dropExtension n
 guessOutputFilename Nothing _   = "a.out"
 
+noInputFiles :: IO ()
+noInputFiles = hPutStrLn stderr "ghc-parmake: no input files"
+
 -- Program entry point.
 
 main :: IO ()
@@ -115,6 +119,7 @@ main =
 
      when (printVersion args) $ putStrLn "ghc-parmake 0.1" >> exitSuccess
      when (printUsage args)   $ usage >> exitSuccess
+     when (null files)        $ noInputFiles >> exitFailure
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps ghcArgs files
