@@ -39,7 +39,7 @@ Executable ghc-parmake
 Test-suite tests
   Type:                 exitcode-stdio-1.0
   Hs-source-dirs:       tests
-  Main-is:              Properties.hs
+  Main-is:              Tests.hs
   Build-depends:        base >= 4.0 && < 5,
                         filepath >= 1 && < 2,
                         directory >= 1.1 && < 2,

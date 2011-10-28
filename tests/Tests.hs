@@ -89,8 +89,8 @@ pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
 
 mkTestCase :: FilePath -> Assertion
 mkTestCase dirName = do let p = "tests" </> "data" </> dirName
-                        b <- doesFileExist f
-                        assertBool ("File '" ++ f ++ "' doesn't exist!") b
+                        b <- doesDirectoryExist p
+                        assertBool ("File '" ++ p ++ "' doesn't exist!") b
 
 ------------------------------------------------------------------------
 -- Test harness
