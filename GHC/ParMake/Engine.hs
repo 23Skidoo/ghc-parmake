@@ -133,11 +133,13 @@ controlThread p outputFilename cch wch =
        then return ExitSuccess
        else go (BuildPlan.markReadyAsBuilding p) curNum
   where
+    -- Stuff a bunch of tasks into the controller -> workers comm. channel.
     postTasks :: [Target] -> Int -> IO Int
     postTasks rdy curNum =
       foldM (\curNum' t -> do writeChan wch (BuildModule curNum' t)
                               return $ curNum' + 1) curNum rdy
 
+    -- Main loop.
     go :: BuildPlan -> Int -> IO ExitCode
     go plan curNum =
       do msg <- readChan cch
