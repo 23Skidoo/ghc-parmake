@@ -151,7 +151,7 @@ depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
     mkModuleTarget tId tDeps = assert check (Target tId tSrc tDeps)
       where
         tSrc = fromMaybe (error "No source file in dependencies!")
-               $ find ((==) ".hs" . takeExtension) tDeps
+               $ find ((`elem` sourceExts). takeExtension) tDeps
 
         check = (takeExtension tId `elem` objExts)
                 && (length tDeps == 1
