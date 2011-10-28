@@ -34,8 +34,8 @@ logThreadOutputHooks :: String -> LogChan -> OutputHooks
 logThreadOutputHooks prefix logChan = OutputHooks {
   putStrHook      = \msg -> writeChan logChan $ LogStr (prefix ++ msg),
   putStrLnHook    = \msg -> writeChan logChan $ LogStrLn (prefix ++ msg),
-  putStrErrHook   = \msg -> writeChan logChan $ LogStrErr (prefix ++ msg),
-  putStrLnErrHook = \msg -> writeChan logChan $ LogStrLnErr (prefix ++ msg),
+  putStrErrHook   = \msg -> writeChan logChan $ LogStrErr msg,
+  putStrLnErrHook = \msg -> writeChan logChan $ LogStrLnErr msg,
   flushStdOutHook = writeChan logChan LogFlushStdOut
   }
 
