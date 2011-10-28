@@ -1,7 +1,7 @@
 * Parallel compilation
 * Be able to build itself (in parallel, with -odir -hidir)
 
-* Support building libraries (just -main-is?)
+* Support building libraries (use -main-is?)
 * Test on some large project (e.g. Darcs/Agda)
 * Release 0.1 version
 * Announce the release
@@ -15,5 +15,5 @@
 * Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
 * Look at how GHC does the timestamp check
-* Cache timestamp checks
+* Cache timestamp checks (is it worth it? Need a parallel writable map)
 * Test on Windows

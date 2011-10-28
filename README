@@ -5,6 +5,7 @@ Usage: ghc-parmake -j N MyProgram.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
 
 Known deficiencies:
 
-      * Build fails when -odir != -hidir
-      * -hisuf/-osuf are not supported (needed for building libs for profiling)
-      * Tested only on Linux
+      * Building libraries is not yet supported.
+      * Build fails when -odir != -hidir.
+      * -hisuf/-osuf are not supported (needed for building libs for profiling).
+      * Tested only on Linux.
