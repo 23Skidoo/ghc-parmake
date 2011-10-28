@@ -97,8 +97,8 @@ getExitCode program args workingDir =
        (\(inh, outh, errh, _) -> mapM_ hClose [inh, outh, errh])
        (\(_,_,_,pid) -> waitForProcess pid)
 
-mkTestCase :: FilePath -> Assertion
-mkTestCase dirName =
+mkTestCase :: FilePath -> Int -> Assertion
+mkTestCase dirName numJobs =
   do t1 <- doesDirectoryExist testDir
      t2 <- doesFileExist makeProgram
      assertBool ("Directory '" ++ testDir ++ "' doesn't exist!") t1
@@ -108,7 +108,8 @@ mkTestCase dirName =
      curDir <- getCurrentDirectory
      createDirectory oDir
      exitCode <- getExitCode (curDir </> makeProgram)
-                 ["Main.hs", "-odir", oDirName, "-hidir", oDirName] testDir
+                 [ "Main.hs", "-j", show numJobs
+                 , "-odir", oDirName, "-hidir", oDirName] testDir
      assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
      removeDirectoryRecursive oDir
 
@@ -140,7 +141,7 @@ tests =
       , testProperty "compile" pCompile
       ]
     , testGroup "tests"
-      [ testCase dirName (mkTestCase dirName)
+      [ testCase dirName (mkTestCase dirName 2)
       | dirName <- [ "executable" , "executable-lhs"
                    , "executable-mutrec", "executable-lhs-mutrec" ]
       ]
