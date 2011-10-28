@@ -6,7 +6,7 @@ module GHC.ParMake.BuildPlan
        (new, ready, building, completed, size
        , numCompleted, markCompleted
        , markReadyAsBuilding, numBuilding, hasBuilding
-       , BuildPlan, Target, TargetId, targetId, depends, source, object)
+       , BuildPlan, Target, TargetId, targetId, depends, source, object, objects)
        where
 
 import qualified Data.Array as Array
@@ -20,7 +20,7 @@ import Data.Function (on)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
 import Data.List (find, groupBy, sortBy)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
 
@@ -53,6 +53,11 @@ object (Target tId _ _) = case takeExtension tId
                           of ".o-boot" -> Nothing
                              _         -> Just tId
 
+-- | Given a BuildPlan, return the list of object files for all completed
+-- targets.
+objects :: BuildPlan -> [FilePath]
+objects = mapMaybe object . completed
+
 sourceExts, interfaceExts, objExts :: [String]
 sourceExts    = [".hs", ".lhs", ".hs-boot", ".lhs-boot"]
 interfaceExts = [".hi", ".hi-boot"]
@@ -73,7 +78,7 @@ data BuildPlan = BuildPlan {
   planBuilding  :: IntSet
 }
 
--- For debugging.
+-- Custom Show instance for debugging.
 instance Show BuildPlan where
   show p = "BuildPlan {\n planGraph = "
            ++ show (planGraph p)
@@ -93,10 +98,9 @@ instance Show BuildPlan where
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
 new :: [(TargetId, TargetId)] -> BuildPlan
-new deps = plan
-  where
-    plan = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
+new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
            numDepsMap readySet buildingSet
+  where
     targetIdToVertex   = binarySearch 0 topBound
     vertexToTargetId v = targetTable ! v
 

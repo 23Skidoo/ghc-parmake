@@ -3,10 +3,8 @@
 module GHC.ParMake.Engine
        where
 
-import Control.Exception as E (catch, throw)
-import Control.Concurrent (readChan, writeChan, Chan)
-import Control.Monad (foldM, forever, unless)
-import Data.Maybe (mapMaybe)
+import Control.Concurrent (forkIO, newChan, readChan, writeChan, Chan)
+import Control.Monad (foldM, forever, forM_, when)
 import System.Exit (ExitCode(..))
 import System.FilePath (dropExtension)
 
@@ -14,91 +12,169 @@ import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..)
                          , runProcess, upToDateCheck
-                         , Verbosity, debug', notice', noticeRaw)
+                         , Verbosity, debug, notice, noticeRaw)
+
+-- The program consists of several threads which communicate via Chans. There
+-- are several worker threads, which compile the modules. A single control
+-- thread maintains the module graph and assigns tasks to the worker threads. A
+-- single logger thread prints out messages received from the worker threads.
+
+-- After the worker thread compiles a module, it notifies the controller thread,
+-- which then updates the module graph and adds new tasks for the worker threads
+-- (if possible). The control thread terminates when the last module has been
+-- built (which leads to the termination of all other threads).
 
 -- One-way controller/worker -> logger communication.
-data LogTask = LogStr String | LogStrErr String
+data LogTask = LogStr String | LogStrLn String
+             | LogStrErr String | LogStrLnErr String
+             | LogFlushStdOut
 type LogChan = Chan LogTask
 
 logThreadOutputHooks :: String -> LogChan -> OutputHooks
 logThreadOutputHooks prefix logChan = OutputHooks {
-  -- TODO: Fix these
-  putStrHook      = undefined,
-  putStrLnHook    = \msg -> writeChan logChan $ LogStr (prefix ++ msg),
-  putStrErrHook   = undefined,
-  putStrLnErrHook = \msg -> writeChan logChan $ LogStrErr (prefix ++ msg),
-  flushStdOutHook = undefined
+  putStrHook      = \msg -> writeChan logChan $ LogStr (prefix ++ msg),
+  putStrLnHook    = \msg -> writeChan logChan $ LogStrLn (prefix ++ msg),
+  putStrErrHook   = \msg -> writeChan logChan $ LogStrErr (prefix ++ msg),
+  putStrLnErrHook = \msg -> writeChan logChan $ LogStrLnErr (prefix ++ msg),
+  flushStdOutHook = writeChan logChan LogFlushStdOut
   }
 
 logThread :: LogChan -> IO ()
 logThread lch = forever $ do
   task <- readChan lch
   case task of
-    LogStr s    -> putStrLnHook defaultOutputHooks s
-    LogStrErr s -> putStrLnErrHook defaultOutputHooks s
+    LogStr s       -> putStrHook defaultOutputHooks s
+    LogStrLn s     -> putStrLnHook defaultOutputHooks s
+    LogStrErr s    -> putStrErrHook defaultOutputHooks s
+    LogStrLnErr s  -> putStrLnErrHook defaultOutputHooks s
+    LogFlushStdOut -> flushStdOutHook defaultOutputHooks
 
 -- One-way controller -> worker communication.
-data WorkerTask = BuildModule String
+data WorkerTask = BuildModule Int Target | BuildProgram FilePath [FilePath]
 type WorkerChan = Chan WorkerTask
 
-workerThread :: [String] -> OutputHooks -> WorkerChan -> ControlChan -> IO ()
-workerThread = undefined
+workerThread :: OutputHooks -> Verbosity -> String -> [String]
+                -> WorkerChan -> ControlChan
+                -> IO ()
+workerThread outHooks verbosity totNum ghcArgs wch cch
+  = forever $ do
+    task <- readChan wch
+    case task of
+      BuildModule curNum target ->
+        do exitCode <- buildModule curNum target
+           onSuccess exitCode $ ModuleBuilt target
 
--- One-way worker -> controller communication.
-data ControlMessage = ModuleBuilt String
-type ControlChan = Chan ControlMessage
-
-controlThread :: OutputHooks -> ControlChan -> WorkerChan -> IO ()
-controlThread = undefined
-
--- | Given a BuildPlan, perform the compilation.
-compile :: Verbosity -> BuildPlan -> Int -> [String] -> String -> IO ExitCode
-compile v p _numJobs ghcArgs outputFilename = E.catch (go 1 p) handler
+      BuildProgram outputFilename objects ->
+        do exitCode <- buildProgram outputFilename objects
+           onSuccess exitCode $ ProgramBuilt
   where
-    handler :: ExitCode -> IO ExitCode
-    handler e = return e
 
-    totNum :: String
-    totNum = show $ BuildPlan.size p
-
-    runGHC :: [String] -> IO ()
+    runGHC :: [String] -> IO ExitCode
     runGHC args =
-      do debug' v $ show ("ghc":args)
-         exitCode <- runProcess defaultOutputHooks Nothing "ghc" args
-         unless (exitCode == ExitSuccess) (throw exitCode)
+      do debug outHooks verbosity $ show ("ghc":args)
+         runProcess outHooks Nothing "ghc" args
 
-    slashesToDots = map (\s -> if s == '/' then '.' else s)
+    onSuccess :: ExitCode -> ControlMessage -> IO ()
+    onSuccess exitCode msg =
+      if exitCode /= ExitSuccess
+      then writeChan cch $ BuildFailed exitCode
+      else writeChan cch msg
 
-    doCompile :: (Int, BuildPlan) -> Target -> IO (Int, BuildPlan)
-    doCompile (curNum, plan) target =
+    slashesToDots :: String -> String
+    slashesToDots = map slashToDot
+      where
+        slashToDot '/' = '.'
+        slashToDot c   = c
+
+    buildModule :: Int -> Target -> IO ExitCode
+    buildModule curNum target =
       do let tId   = BuildPlan.targetId target
          let tSrc  = BuildPlan.source target
          let tDeps = BuildPlan.depends target
-         let plan' = BuildPlan.markCompleted plan target
          let tName = slashesToDots . dropExtension $ tSrc
          let msg = "[" ++ show curNum ++ " of "++ totNum ++ "] Compiling "
                    ++ tName
                    ++ replicate (16 - length tName) ' '
                    ++ " ( " ++ tSrc ++ ", " ++ tId ++ " )\n"
          isUpToDate <- upToDateCheck tId tDeps
-         unless isUpToDate $ do noticeRaw defaultOutputHooks v msg
-                                runGHC ("-c":tSrc:ghcArgs)
-         return (curNum + 1, plan')
+         if not isUpToDate
+           then
+           do noticeRaw outHooks verbosity msg
+              runGHC ("-c":tSrc:ghcArgs)
+           else
+           return ExitSuccess
 
-    doLink :: BuildPlan -> IO ()
-    doLink plan =
-      do let objs = mapMaybe BuildPlan.object $ BuildPlan.completed plan
-         let cmdLine = ("-o":outputFilename:(objs ++ ghcArgs))
+    buildProgram :: FilePath -> [FilePath] -> IO ExitCode
+    buildProgram outputFilename objs  =
+      do let cmdLine = ("-o":outputFilename:(objs ++ ghcArgs))
          isUpToDate <- upToDateCheck outputFilename objs
-         unless isUpToDate (notice' v ("Linking " ++ outputFilename ++ "...")
-                            >> runGHC cmdLine)
+         if not isUpToDate
+           then do notice outHooks verbosity
+                     ("Linking " ++ outputFilename ++ "...")
+                   runGHC cmdLine
+           else return ExitSuccess
 
-    go :: Int -> BuildPlan -> IO ExitCode
-    go curNum plan =
-      let rdy = BuildPlan.ready plan
-      in case rdy of
-         [] -> do doLink plan
-                  return ExitSuccess
-         _  -> do let plan' = BuildPlan.markReadyAsBuilding plan
-                  (curNum', plan'') <- foldM doCompile (curNum, plan') rdy
-                  go curNum' plan''
+
+-- One-way worker -> controller communication.
+data ControlMessage = ModuleBuilt Target | BuildFailed ExitCode | ProgramBuilt
+type ControlChan = Chan ControlMessage
+
+controlThread :: BuildPlan -> FilePath -> ControlChan -> WorkerChan
+                 -> IO ExitCode
+controlThread p outputFilename cch wch =
+  do let rdy = BuildPlan.ready p
+     -- Give worker threads initial tasks.
+     curNum <- postTasks rdy 1
+
+     -- Shouldn't happen
+     if null rdy
+       then return ExitSuccess
+       else go (BuildPlan.markReadyAsBuilding p) curNum
+  where
+    postTasks :: [Target] -> Int -> IO Int
+    postTasks rdy curNum =
+      foldM (\curNum' t -> do writeChan wch (BuildModule curNum' t)
+                              return $ curNum' + 1) curNum rdy
+
+    go :: BuildPlan -> Int -> IO ExitCode
+    go plan curNum =
+      do msg <- readChan cch
+         case msg of
+           ModuleBuilt target ->
+             do let plan' = BuildPlan.markCompleted plan target
+                let rdy   = BuildPlan.ready plan'
+                curNum'  <- postTasks rdy curNum
+                let plan'' = BuildPlan.markReadyAsBuilding plan'
+                when (null rdy && BuildPlan.numBuilding plan'' == 0)
+                  (writeChan wch (BuildProgram outputFilename
+                                  $ BuildPlan.objects plan''))
+                go plan'' curNum'
+
+           ProgramBuilt  -> return ExitSuccess
+
+           -- TODO: Wait for all worker threads to finish.
+           BuildFailed c -> return c
+
+-- | Given a BuildPlan, perform the compilation.
+compile :: Verbosity -> BuildPlan -> Int -> [String] -> String -> IO ExitCode
+compile verbosity plan numJobs ghcArgs outputFilename =
+  do
+    -- Init comm. channels
+    workerChan  <- newChan
+    logChan     <- newChan
+    controlChan <- newChan
+
+    -- Fork off worker threads.
+    forM_ [1..numJobs]
+      (\n -> forkIO $ workerThread
+             (logThreadOutputHooks ("[" ++ show n ++ "]") logChan)
+             verbosity totNum ghcArgs workerChan controlChan)
+
+    -- Fork off log thread.
+    _ <- ($) forkIO $ logThread logChan
+
+    -- Start the control thread.
+    controlThread plan outputFilename controlChan workerChan
+  where
+    totNum :: String
+    totNum = show $ BuildPlan.size plan
