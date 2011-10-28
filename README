@@ -1,9 +1,20 @@
-This is slowly evolving into a parallel wrapper for 'ghc --make'. I plan to
-integrate it with 'cabal build' eventually.
+'ghc-parmake' is a parallel wrapper for 'ghc --make': it can build your Haskell
+program using multiple cores. It is intended to work as a drop-in replacement
+for 'ghc --make' (and eventually will be integrated into 'cabal build').
 
-Usage: ghc-parmake -j N MyProgram.hs [$GHC_OPTIONS] [$RTS_OPTIONS]
+Usage: ghc-parmake OPTS FILES
 
-Known deficiencies:
+Options:
+
+-j N    - Run N jobs in parallel.
+-vv[N]  - Set verbosity to N (only for ghc-parmake). N is 0-3, default 1.
+-v[N]   - Set verbosity to N (both for GHC and ghc-parmake itself).
+--help  - Print usage information.
+-V      - Print version information.
+
+Other options are passed to GHC unmodified.
+
+Known limitations:
 
       * Building libraries is not yet supported.
       * Build fails when -odir != -hidir.
