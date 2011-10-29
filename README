@@ -1,6 +1,12 @@
-'ghc-parmake' is a parallel wrapper for 'ghc --make': it can build your Haskell
-program using multiple cores. It is intended to work as a drop-in replacement
-for 'ghc --make' (and eventually will be integrated into 'cabal build').
+'ghc-parmake' is a parallel wrapper for 'ghc --make': it is intended to work as
+its drop-in replacement. It can build your Haskell program or library in
+parallel using multiple cores and will be integrated with 'cabal build'
+eventually (though I also plan to support the standalone version).
+
+'ghc-parmake' works by first extracting a module dependency graph with 'ghc -M'
+and then running multiple 'ghc -c' processes in parallel.
+
+--
 
 Usage: ghc-parmake OPTS FILES
 
@@ -13,6 +19,8 @@ Options:
 -V      - Print version information.
 
 Other options are passed to GHC unmodified.
+
+--
 
 Known limitations:
 
