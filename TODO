@@ -1,10 +1,10 @@
 * Support building libraries (use -main-is?)
 * Test on some large project (e.g. Darcs/Agda)
-* Release 0.1 version
+* Release 0.2 version
 * Announce the release
 
 * Fix reported bugs
-* Release 0.1.1/2/..
+* Make bugfix releases
 
 * Support -odir != -hidir (w/tests)
 * Test w/o '-odir -hidir' (requires recursively cleaning up the test data dir)
