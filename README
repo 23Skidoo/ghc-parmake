@@ -1,11 +1,13 @@
-'ghc-parmake' is a parallel wrapper for 'ghc --make': it is intended to work as
-its drop-in replacement. It can build your Haskell program or library in
-parallel using multiple cores and will be integrated with 'cabal build'
-eventually (though I also plan to support the standalone version).
+'ghc-parmake' is a parallel wrapper for 'ghc --make' intended to work as its
+drop-in replacement. It can build your Haskell program in parallel using
+multiple cores and will be integrated with 'cabal build' eventually (though I
+also plan to support the standalone version).
 
 'ghc-parmake' works by first extracting a module dependency graph with 'ghc -M'
 and then running multiple 'ghc -c' processes in parallel. Currently, it can
 build itself and some small test programs (see the 'tests' directory).
+
+To set the number of concurrent jobs, use the '-j' option.
 
 --
 
@@ -28,6 +30,6 @@ Known limitations:
       * Building libraries is not yet supported.
       * Build fails when -odir != -hidir.
       * Unlike 'ghc --make', ghc-parmake can't figure out package dependencies automatically,
-        so you'll need to specify them by hand with the -package option.
+        so you'll have to specify them by hand with the -package option.
       * -hisuf/-osuf are not supported (needed for building libs for profiling).
       * Tested only on Linux.

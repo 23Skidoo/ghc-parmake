@@ -2,10 +2,17 @@ Name:                   ghc-parmake
 Version:                0.1.1
 Synopsis:               A parallel wrapper for 'ghc --make'.
 
-Description:            'ghc-parmake' is a parallel wrapper for 'ghc --make': it
-                        is intended to work as its drop-in replacement. It can
+Description:            'ghc-parmake' is a parallel wrapper for 'ghc --make'
+                        intended to work as its drop-in replacement. It can
                         build your Haskell program in parallel using multiple
                         cores.
+
+                        'ghc-parmake' works by extracting a module dependency
+                        graph with 'ghc -M' and then running multiple 'ghc -c'
+                        processes in parallel.
+
+                        To set the number of concurrent jobs, use the '-j'
+                        option.
 
 Homepage:               https://github.com/23Skidoo/ghc-parmake
 Bug-reports:            https://github.com/23Skidoo/ghc-parmake/issues
