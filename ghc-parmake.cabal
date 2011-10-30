@@ -1,5 +1,5 @@
 Name:                   ghc-parmake
-Version:                0.1
+Version:                0.1.1
 Synopsis:               A parallel wrapper for 'ghc --make'.
 
 Description:            'ghc-parmake' is a parallel wrapper for 'ghc --make': it
