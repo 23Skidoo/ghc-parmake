@@ -108,7 +108,7 @@ mkTestCase dirName numJobs =
      curDir <- getCurrentDirectory
      createDirectory oDir
      exitCode <- getExitCode (curDir </> makeProgram)
-                 [ "Main.hs", "-j", show numJobs
+                 [ "Main.hs", "-package", "base", "-j", show numJobs
                  , "-odir", oDirName, "-hidir", oDirName] testDir
      assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
      removeDirectoryRecursive oDir

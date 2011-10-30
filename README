@@ -27,5 +27,7 @@ Known limitations:
 
       * Building libraries is not yet supported.
       * Build fails when -odir != -hidir.
+      * Unlike 'ghc --make', ghc-parmake can't figure out package dependencies automatically,
+        so you'll need to specify them by hand with the -package option.
       * -hisuf/-osuf are not supported (needed for building libs for profiling).
       * Tested only on Linux.

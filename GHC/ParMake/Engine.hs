@@ -72,8 +72,9 @@ workerThread outHooks verbosity totNum ghcArgs wch cch
 
     runGHC :: [String] -> IO ExitCode
     runGHC args =
-      do debug outHooks verbosity $ show ("ghc":args)
-         runProcess outHooks Nothing "ghc" args
+      do let args' = "-hide-all-packages":args
+         debug outHooks verbosity $ show ("ghc":args')
+         runProcess outHooks Nothing "ghc" args'
 
     onSuccess :: ExitCode -> ControlMessage -> ControlMessage -> IO ()
     onSuccess exitCode msgSucc msgFail =
