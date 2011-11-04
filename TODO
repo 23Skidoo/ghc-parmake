@@ -9,6 +9,7 @@
 * Support -odir != -hidir (w/tests)
 * Test w/o '-odir -hidir' (requires recursively cleaning up the test data dir)
 * Support -hisuf/-osuf/etc (needed for building profiling versions)
+* Support -split-objs
 * Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
 * Look at how GHC does the timestamp check

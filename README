@@ -32,4 +32,5 @@ Known limitations:
       * Unlike 'ghc --make', ghc-parmake can't figure out package dependencies automatically,
         so you'll have to specify them by hand with the -package option.
       * -hisuf/-osuf are not supported (needed for building libs for profiling).
+      * Build fails with -split-objs
       * Tested only on Linux.
