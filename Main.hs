@@ -131,5 +131,5 @@ main =
 
      debug' v "Building..."
      let ofn = guessOutputFilename (outputFilename args) files
-     exitCode <- Engine.compile v plan (numJobs args) ghcArgs ofn
+     exitCode <- Engine.compile v plan (numJobs args) ghcArgs files ofn
      exitWith exitCode

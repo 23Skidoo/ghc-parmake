@@ -12,7 +12,7 @@ import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..)
                          , runProcess, upToDateCheck
-                         , Verbosity, debug, notice, noticeRaw)
+                         , Verbosity, debug, noticeRaw)
 
 -- The program consists of several threads which communicate via Chans. There
 -- are several worker threads, which compile the modules. A single control
@@ -53,10 +53,10 @@ logThread lch = forever $ do
 data WorkerTask = BuildModule Int Target | BuildProgram FilePath [FilePath]
 type WorkerChan = Chan WorkerTask
 
-workerThread :: OutputHooks -> Verbosity -> String -> [String]
+workerThread :: OutputHooks -> Verbosity -> String -> [String] -> [String]
                 -> WorkerChan -> ControlChan
                 -> IO ()
-workerThread outHooks verbosity totNum ghcArgs wch cch
+workerThread outHooks verbosity totNum ghcArgs files wch cch
   = forever $ do
     task <- readChan wch
     case task of
@@ -65,16 +65,15 @@ workerThread outHooks verbosity totNum ghcArgs wch cch
            onSuccess exitCode (ModuleCompiled target)
              (CompileFailed target exitCode)
 
-      BuildProgram outputFilename objects ->
-        do exitCode <- buildProgram outputFilename objects
+      BuildProgram outputFilename _objects ->
+        do exitCode <- buildProgram outputFilename
            onSuccess exitCode (BuildCompleted) (BuildFailed exitCode)
   where
 
     runGHC :: [String] -> IO ExitCode
     runGHC args =
-      do let args' = "-hide-all-packages":args
-         debug outHooks verbosity $ show ("ghc":args')
-         runProcess outHooks Nothing "ghc" args'
+      do debug outHooks verbosity $ show ("ghc":args)
+         runProcess outHooks Nothing "ghc" args
 
     onSuccess :: ExitCode -> ControlMessage -> ControlMessage -> IO ()
     onSuccess exitCode msgSucc msgFail =
@@ -106,16 +105,9 @@ workerThread outHooks verbosity totNum ghcArgs wch cch
            else
            return ExitSuccess
 
-    buildProgram :: FilePath -> [FilePath] -> IO ExitCode
-    buildProgram outputFilename objs  =
-      do let cmdLine = ("-o":outputFilename:(objs ++ ghcArgs))
-         isUpToDate <- upToDateCheck outputFilename objs
-         if not isUpToDate
-           then do notice outHooks verbosity
-                     ("Linking " ++ outputFilename ++ "...")
-                   runGHC cmdLine
-           else return ExitSuccess
-
+    buildProgram :: FilePath -> IO ExitCode
+    buildProgram outputFilename =
+      runGHC ("--make":"-o":outputFilename:(files ++ ghcArgs))
 
 -- One-way worker -> controller communication.
 data ControlMessage = ModuleCompiled Target | BuildCompleted
@@ -182,8 +174,9 @@ controlThread p outputFilename cch wch =
       else return exitCode
 
 -- | Given a BuildPlan, perform the compilation.
-compile :: Verbosity -> BuildPlan -> Int -> [String] -> String -> IO ExitCode
-compile verbosity plan numJobs ghcArgs outputFilename =
+compile :: Verbosity -> BuildPlan -> Int -> [String] -> [String] -> String
+           -> IO ExitCode
+compile verbosity plan numJobs ghcArgs files outputFilename =
   do
     -- Init comm. channels
     workerChan  <- newChan
@@ -193,8 +186,9 @@ compile verbosity plan numJobs ghcArgs outputFilename =
     -- Fork off worker threads.
     forM_ [1..numJobs]
       (\n -> forkIO $ workerThread
-             (logThreadOutputHooks ("[" ++ show n ++ "]") logChan)
-             verbosity totNum ghcArgs workerChan controlChan)
+             (logThreadOutputHooks
+              (if numJobs == 1 then "" else "[" ++ show n ++ "]") logChan)
+             verbosity totNum ghcArgs files workerChan controlChan)
 
     -- Fork off log thread.
     _ <- ($) forkIO $ logThread logChan
