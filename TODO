@@ -1,12 +1,16 @@
 * Support -odir != -hidir (w/tests)
+* Support dependencies added with the DEPENDS pragma (w/tests) (see
+  http://hackage.haskell.org/trac/ghc/ticket/4900)
 * Test w/o '-odir -hidir' (requires recursively cleaning up the test data dir)
 * Support -hisuf/-osuf/etc (needed for building profiling versions)
 * Test on some large project (e.g. Darcs/Agda)
 * Release version 0.2
 * Announce the release
 
+
 * Fix reported bugs
 * Make bugfix releases
+
 
 * Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
