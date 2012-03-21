@@ -53,10 +53,11 @@ logThread lch = forever $ do
 data WorkerTask = BuildModule Int Target | BuildProgram FilePath [FilePath]
 type WorkerChan = Chan WorkerTask
 
-workerThread :: OutputHooks -> Verbosity -> String -> [String] -> [String]
+workerThread :: OutputHooks -> Verbosity -> String
+                -> FilePath -> [String] -> [FilePath]
                 -> WorkerChan -> ControlChan
                 -> IO ()
-workerThread outHooks verbosity totNum ghcArgs files wch cch
+workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
   = forever $ do
     task <- readChan wch
     case task of
@@ -72,8 +73,8 @@ workerThread outHooks verbosity totNum ghcArgs files wch cch
 
     runGHC :: [String] -> IO ExitCode
     runGHC args =
-      do debug outHooks verbosity $ show ("ghc":args)
-         runProcess outHooks Nothing "ghc" args
+      do debug outHooks verbosity $ show (ghcPath:args)
+         runProcess outHooks Nothing ghcPath args
 
     onSuccess :: ExitCode -> ControlMessage -> ControlMessage -> IO ()
     onSuccess exitCode msgSucc msgFail =
@@ -174,9 +175,10 @@ controlThread p outputFilename cch wch =
       else return exitCode
 
 -- | Given a BuildPlan, perform the compilation.
-compile :: Verbosity -> BuildPlan -> Int -> [String] -> [String] -> String
+compile :: Verbosity -> BuildPlan -> Int
+           -> FilePath -> [String] -> [FilePath] -> FilePath
            -> IO ExitCode
-compile verbosity plan numJobs ghcArgs files outputFilename =
+compile verbosity plan numJobs ghcPath ghcArgs files outputFilename =
   do
     -- Init comm. channels
     workerChan  <- newChan
@@ -188,7 +190,7 @@ compile verbosity plan numJobs ghcArgs files outputFilename =
       (\n -> forkIO $ workerThread
              (logThreadOutputHooks
               (if numJobs == 1 then "" else "[" ++ show n ++ "]") logChan)
-             verbosity totNum ghcArgs files workerChan controlChan)
+             verbosity totNum ghcPath ghcArgs files workerChan controlChan)
 
     -- Fork off log thread.
     _ <- ($) forkIO $ logThread logChan

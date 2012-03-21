@@ -42,12 +42,12 @@ trimLines ls = [ l | l <- ls, isValidLine l]
 -- Interaction with the outside world.
 
 -- Run 'ghc -M' and return dependencies for every module.
-getModuleDeps :: [String] -> [String] -> IO [(String, String)]
-getModuleDeps ghcArgs files =
+getModuleDeps :: FilePath -> [String] -> [FilePath] -> IO [(String, String)]
+getModuleDeps ghcPath ghcArgs files =
   withSystemTempDirectory "ghc-parmake" $ \tmpDir -> do
     let tmpFile = tmpDir </> "depends.mk"
     let ghcArgs' = files ++ ("-M":"-dep-makefile":tmpFile:ghcArgs)
-    exitCode <- runProcess defaultOutputHooks Nothing "ghc" ghcArgs'
+    exitCode <- runProcess defaultOutputHooks Nothing ghcPath ghcArgs'
     if exitCode == ExitSuccess
       then (catMaybes . map parseLine . trimLines . lines) <$>
            (openFile tmpFile ReadMode >>= hGetContents)

@@ -2,6 +2,7 @@ module Main
        where
 
 import Control.Monad (liftM, when)
+import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess, exitWith)
@@ -22,6 +23,7 @@ data Args = Args {
   printVersion   :: Bool,
   printUsage     :: Bool,
   numJobs        :: Int,
+  ghcPath        :: String,
   outputFilename :: Maybe String
   } deriving Show
 
@@ -31,6 +33,7 @@ defaultArgs = Args {
   printVersion   = False,
   printUsage     = False,
   numJobs        = 1,
+  ghcPath        = "ghc",
   outputFilename = Nothing
   }
 
@@ -41,18 +44,22 @@ parseArgs l = go l defaultArgs
                      (liftM abs $ maybeRead n)
     parseVerbosity n = fromMaybe verbose (maybeRead n >>= intToVerbosity)
 
-    go [] acc                      = acc
-    go ("-V":_) acc                = acc { printVersion = True }
-    go ("--help":_) acc            = acc { printUsage = True }
-    go ("-j":n:as) acc             = go as $ acc { numJobs = parseNumJobs n }
-    go (('-':'j':n:[]):as) acc     = go as $ acc { numJobs = parseNumJobs [n] }
-    go (('-':'v':n:[]):as) acc     = go as $
-                                     acc { verbosity = parseVerbosity [n] }
-    go (('-':'v':'v':n:[]):as) acc = go as $
-                                     acc { verbosity = parseVerbosity [n] }
-    go ("-v":as) acc               = go as $ acc { verbosity = verbose }
-    go ("-o":n:as) acc             = go as $ acc { outputFilename = Just n }
-    go (_:as) acc                  = go as acc
+    go [] acc                        = acc
+    go ("-V":_) acc                  = acc { printVersion = True }
+    go ("--help":_) acc              = acc { printUsage = True }
+    go ("-j":n:as) acc               = go as $ acc { numJobs = parseNumJobs n }
+    go (('-':'j':n:[]):as) acc       = go as $ acc { numJobs = parseNumJobs [n] }
+    go (('-':'v':n:[]):as) acc       = go as $
+                                       acc { verbosity = parseVerbosity [n] }
+    go (('-':'v':'v':n:[]):as) acc   = go as $
+                                       acc { verbosity = parseVerbosity [n] }
+    go ("-v":as) acc                 = go as $ acc { verbosity = verbose }
+    go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
+    go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
+    go (a:as) acc
+      | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
+                                       go (o:(tail p'):as) acc
+    go (_:as) acc                    = go as acc
 
 
 getGhcArgs :: [String] -> ([String],[String])
@@ -78,10 +85,13 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
     eatOption (x:xs) as        = (xs, x:as)
 
     getGhcArgs' [] as fs                      = (as, fs)
-    -- Options not passed to GHC: -o, -j, -vv.
+    -- Options not passed to GHC: -o, -j, -vv, --ghc-path.
     getGhcArgs' ("-j":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' ("-o":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' (('-':'v':'v':_:[]):xs) as fs = getGhcArgs' xs as fs
+    getGhcArgs' ("--ghc-path":_:xs)     as fs = getGhcArgs' xs as fs
+    getGhcArgs' (x:xs) as fs
+      | "--ghc-path=" `isPrefixOf` x          = getGhcArgs' xs as fs
     getGhcArgs' xs@(('-':_):_) as fs          = let (xs', as') = eatOption xs as
                                                 in getGhcArgs' xs' as' fs
     getGhcArgs' (x:xs) as fs                  = getGhcArgs' xs as (x:fs)
@@ -91,12 +101,14 @@ usage =
   putStr $ "Usage: ghc-parmake [OPTIONS] FILES\n" ++
   "A parallel wrapper around 'ghc --make'.\n\n" ++
   "Options: \n" ++
-  "-j N    - Run N jobs in parallel. \n" ++
-  "-vv[N]  - Set verbosity to N (only for ghc-parmake). " ++
+  "-j N             - Run N jobs in parallel. \n" ++
+  "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
-  "-v[N]   - Set verbosity to N (both for GHC and ghc-parmake itself). \n" ++
-  "--help  - Print usage information. \n" ++
-  "-V      - Print version information. \n" ++
+  "-v[N]            - Set verbosity to N " ++ 
+  "(both for GHC and ghc-parmake itself). \n" ++
+  "--help           - Print usage information. \n" ++
+  "-V               - Print version information. \n" ++
+  "--ghc-path=PATH  - Use PATH as the ghc command. \n" ++
   "\nOther options are passed to GHC unmodified.\n"
 
 guessOutputFilename :: Maybe FilePath -> [FilePath] -> FilePath
@@ -104,8 +116,8 @@ guessOutputFilename (Just n) _  = n
 guessOutputFilename Nothing [n] = dropExtension n
 guessOutputFilename Nothing _   = "a.out"
 
-noInputFiles :: IO ()
-noInputFiles = hPutStrLn stderr "ghc-parmake: no input files"
+fatal :: String -> IO ()
+fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 
 -- Program entry point.
 
@@ -117,12 +129,13 @@ main =
      let v = verbosity $ args
      debug' v $ "Parsed args: " ++ show args
 
-     when (printVersion args) $ putStrLn "ghc-parmake 0.1" >> exitSuccess
-     when (printUsage args)   $ usage >> exitSuccess
-     when (null files)        $ noInputFiles >> exitFailure
+     when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
+     when (printUsage args)     $ usage >> exitSuccess
+     when (null files)          $ fatal "no input files" >> exitFailure
+     when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
 
      debug' v "Running ghc -M..."
-     deps <- Parse.getModuleDeps ghcArgs files
+     deps <- Parse.getModuleDeps (ghcPath args) ghcArgs files
      when (null deps) $ exitFailure
 
      debug' v ("Parsed dependencies:\n" ++ show deps)
@@ -131,5 +144,6 @@ main =
 
      debug' v "Building..."
      let ofn = guessOutputFilename (outputFilename args) files
-     exitCode <- Engine.compile v plan (numJobs args) ghcArgs files ofn
+     exitCode <- Engine.compile v plan (numJobs args)
+                 (ghcPath args) ghcArgs files ofn
      exitWith exitCode
