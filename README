@@ -16,7 +16,7 @@ Usage: ghc-parmake OPTS FILES
 Options:
 
 -j N             - Run N jobs in parallel.
---ghc-path=PATH  - Use PATH as the ghc command.
+--ghc-path=PATH  - Set the path to the ghc executable.
 
 -vv[N]           - Set verbosity to N (only for ghc-parmake). 
                    N is 0-3, default 1.

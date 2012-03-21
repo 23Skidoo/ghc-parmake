@@ -101,14 +101,14 @@ usage =
   putStr $ "Usage: ghc-parmake [OPTIONS] FILES\n" ++
   "A parallel wrapper around 'ghc --make'.\n\n" ++
   "Options: \n" ++
-  "-j N             - Run N jobs in parallel. \n" ++
+  "-j N             - Run N jobs in parallel.\n" ++
+  "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
   "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
   "-v[N]            - Set verbosity to N " ++ 
-  "(both for GHC and ghc-parmake itself). \n" ++
-  "--help           - Print usage information. \n" ++
-  "-V               - Print version information. \n" ++
-  "--ghc-path=PATH  - Use PATH as the ghc command. \n" ++
+  "(both for GHC and ghc-parmake itself).\n" ++
+  "--help           - Print usage information.\n" ++
+  "-V               - Print version information.\n" ++
   "\nOther options are passed to GHC unmodified.\n"
 
 guessOutputFilename :: Maybe FilePath -> [FilePath] -> FilePath
