@@ -15,11 +15,15 @@ Usage: ghc-parmake OPTS FILES
 
 Options:
 
--j N    - Run N jobs in parallel.
--vv[N]  - Set verbosity to N (only for ghc-parmake). N is 0-3, default 1.
--v[N]   - Set verbosity to N (both for GHC and ghc-parmake itself).
---help  - Print usage information.
--V      - Print version information.
+-j N             - Run N jobs in parallel.
+--ghc-path=PATH  - Use PATH as the ghc command.
+
+-vv[N]           - Set verbosity to N (only for ghc-parmake). 
+                   N is 0-3, default 1.
+-v[N]            - Set verbosity to N (both for GHC and ghc-parmake itself).
+--help           - Print usage information.
+-V               - Print version information.
+
 
 Other options are passed to GHC unmodified.
 
