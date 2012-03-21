@@ -85,13 +85,14 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
     eatOption (x:xs) as        = (xs, x:as)
 
     getGhcArgs' [] as fs                      = (as, fs)
-    -- Options not passed to GHC: -o, -j, -vv, --ghc-path.
+    -- Options not passed to GHC: -o, -j, -vv, --ghc-path, --make.
     getGhcArgs' ("-j":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' ("-o":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' (('-':'v':'v':_:[]):xs) as fs = getGhcArgs' xs as fs
     getGhcArgs' ("--ghc-path":_:xs)     as fs = getGhcArgs' xs as fs
     getGhcArgs' (x:xs) as fs
       | "--ghc-path=" `isPrefixOf` x          = getGhcArgs' xs as fs
+    getGhcArgs' ("--make":xs) as fs           = getGhcArgs' xs as fs
     getGhcArgs' xs@(('-':_):_) as fs          = let (xs', as') = eatOption xs as
                                                 in getGhcArgs' xs' as' fs
     getGhcArgs' (x:xs) as fs                  = getGhcArgs' xs as (x:fs)
