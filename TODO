@@ -1,19 +1,28 @@
+Next release:
+
+* A ghc-par executable (drop-in replacement for ghc) + ghc-parmake as a synonym
+  for 'ghc-par --make'.
 * Support -odir != -hidir (w/tests)
-* Support dependencies added with the DEPENDS pragma (w/tests) (see
-  http://hackage.haskell.org/trac/ghc/ticket/4900)
 * Test w/o '-odir -hidir' (requires recursively cleaning up the test data dir)
 * Support -hisuf/-osuf/etc (needed for building profiling versions)
 * Test on some large project (e.g. Darcs/Agda)
+* Test on Windows
 * Release version 0.2
 * Announce the release
 
+Next+1 release:
 
-* Fix reported bugs
-* Make bugfix releases
+* Move to multiple process architecture with N persistent GHCs. Look at Evan
+  Laforge's ghc-server work (
+  http://www.haskell.org/pipermail/glasgow-haskell-users/2012-February/021907.html
+  ).
+* Release version 0.3
 
+Misc. ideas:
 
+* Support dependencies added with the DEPENDS pragma/#included files (w/tests)
+  (see http://hackage.haskell.org/trac/ghc/ticket/4900)
 * Nicer user interface (see
   http://hackage.haskell.org/trac/hackage/ticket/447 )
 * Look at how GHC does the timestamp check
 * Cache timestamp checks (is it worth it? Need a parallel writable map)
-* Test on Windows
