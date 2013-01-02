@@ -52,9 +52,9 @@ Library
                         containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
-  Ghc-options:          -Wall
+  GHC-options:          -Wall
   if impl(ghc >= 6.8)
-    Ghc-options:        -fwarn-tabs
+    GHC-options:        -fwarn-tabs
 
 Executable ghc-parmake
   Main-is:              Main.hs
@@ -63,9 +63,9 @@ Executable ghc-parmake
                         containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
-  Ghc-options:          -Wall -threaded -rtsopts
+  GHC-options:          -Wall -threaded -rtsopts
   if impl(ghc >= 6.8)
-    Ghc-options:        -fwarn-tabs
+    GHC-options:        -fwarn-tabs
 
 Test-suite tests
   Type:                 exitcode-stdio-1.0
@@ -81,7 +81,7 @@ Test-suite tests
                         test-framework-hunit >= 0.2.6 && < 0.3,
                         QuickCheck >= 2.4.1.1,
                         HUnit >= 1.2.2.0
-  Ghc-Options:          -Wall -threaded -rtsopts
+  GHC-options:          -Wall -threaded -rtsopts
 
 Source-repository head
   Type:                 git
