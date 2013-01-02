@@ -1,5 +1,7 @@
 # ghc-parmake
 
+[![Build Status](https://secure.travis-ci.org/23Skidoo/ghc-parmake.png?branch=master)](http://travis-ci.org/23Skidoo/ghc-parmake)
+
 `ghc-parmake` is a parallel wrapper for `ghc --make` intended to work as its
 drop-in replacement. It can build your Haskell program in parallel using
 multiple cores and will be integrated with `cabal build` eventually (though I
