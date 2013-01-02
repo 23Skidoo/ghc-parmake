@@ -48,8 +48,8 @@ Library
                         GHC.ParMake.Util
   Other-modules:        Distribution.Compat.ReadP
   Hs-source-dirs:       src
-  Build-depends:        array >= 0.3 && < 0.4, base >= 4 && < 5,
-                        containers >= 0.4 && < 0.5,
+  Build-depends:        array >= 0.3 && < 0.5, base >= 4 && < 5,
+                        containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
   Ghc-options:          -Wall
@@ -59,8 +59,8 @@ Library
 Executable ghc-parmake
   Main-is:              Main.hs
   Build-depends:        ghc-parmake == 0.1.*,
-                        array >= 0.3 && < 0.4, base >= 4 && < 5,
-                        containers >= 0.4 && < 0.5,
+                        array >= 0.3 && < 0.5, base >= 4 && < 5,
+                        containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
   Ghc-options:          -Wall -threaded -rtsopts
