@@ -132,8 +132,13 @@ main =
 
      when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
      when (printUsage args)     $ usage >> exitSuccess
-     when (null files)          $ fatal "no input files" >> exitFailure
      when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
+
+     -- Allow invocations without files, such as --version.
+     -- This is important to be available for cabal to determine the GHC version
+     -- when used like cabal build --with-ghc=/path/to/ghc-parmake.
+     when (null files) $
+       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) ghcArgs
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps (ghcPath args) ghcArgs files
