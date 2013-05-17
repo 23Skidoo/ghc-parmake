@@ -69,8 +69,8 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
     pgmSuffixes =  ["L", "P", "c", "m", "s", "a", "l", "dll", "F", "windres"]
     optsWithArg = [ "-odir", "-hidir", "-ohi", "-stubdir", "-outputdir"
                   , "-tmpdir", "-osuf", "-hisuf", "-hcsuf"
-                  , "-package", "-package-id", "-hide-package", "-ignore-package"
-                  , "-package-name", "-package-conf", "-f"
+                  , "-package", "-package-db", "-package-id", "-hide-package"
+                  , "-ignore-package", "-package-name", "-package-conf", "-f"
                   , "-framework", "-framework-path"
                   , "-main-is", "-x"]
                   ++ ["-pgm" ++ str | str <- pgmSuffixes ]
