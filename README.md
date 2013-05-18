@@ -7,6 +7,8 @@ drop-in replacement. It can build your Haskell program in parallel using
 multiple cores and will be integrated with `cabal build` eventually (though I
 also plan to support the standalone version).
 
+To use it with cabal, try `cabal build --with-ghc=ghc-parmake --ghc-options="-j N"`.
+
 `ghc-parmake` works by first extracting a module dependency graph with `ghc -M`
 and then running multiple `ghc -c` processes in parallel. Currently, it can
 build itself and some small test programs (see the `tests` directory).
