@@ -69,8 +69,8 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
     pgmSuffixes =  ["L", "P", "c", "m", "s", "a", "l", "dll", "F", "windres"]
     optsWithArg = [ "-odir", "-hidir", "-ohi", "-stubdir", "-outputdir"
                   , "-tmpdir", "-osuf", "-hisuf", "-hcsuf"
-                  , "-package", "-package-id", "-hide-package", "-ignore-package"
-                  , "-package-name", "-package-conf", "-f"
+                  , "-package", "-package-db", "-package-id", "-hide-package"
+                  , "-ignore-package", "-package-name", "-package-conf", "-f"
                   , "-framework", "-framework-path"
                   , "-main-is", "-x"]
                   ++ ["-pgm" ++ str | str <- pgmSuffixes ]
@@ -132,8 +132,19 @@ main =
 
      when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
      when (printUsage args)     $ usage >> exitSuccess
-     when (null files)          $ fatal "no input files" >> exitFailure
      when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
+
+     -- Allow invocations without files, such as --version.
+     -- This is important to be available for cabal to determine the GHC version
+     -- when used like cabal build --with-ghc=/path/to/ghc-parmake.
+     when (null files) $
+       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) ghcArgs
+
+     when ("-c" `elem` ghcArgs) $
+       -- "-c" is already passed in, we just behave like a normal GHC here,
+       -- since "-c" forbids "-M" (ghc: on the commandline: cannot use `-M' with `-c').
+       -- This also happens e.g. when cabal compiles a c source file via GHC.
+       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps (ghcPath args) ghcArgs files
