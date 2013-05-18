@@ -140,6 +140,12 @@ main =
      when (null files) $
        exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) ghcArgs
 
+     when ("-c" `elem` ghcArgs) $
+       -- "-c" is already passed in, we just behave like a normal GHC here,
+       -- since "-c" forbids "-M" (ghc: on the commandline: cannot use `-M' with `-c').
+       -- This also happens e.g. when cabal compiles a c source file via GHC.
+       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
+
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps (ghcPath args) ghcArgs files
      when (null deps) $ exitFailure
