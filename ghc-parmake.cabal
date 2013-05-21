@@ -24,7 +24,7 @@ Category:               Development
 Stability:              Experimental
 Build-type:             Simple
 Cabal-version:          >=1.8
-Extra-source-files:     README
+Extra-source-files:     README.md
                         tests/data/executable/OUTPUT
                         tests/data/executable/*.hs
                         tests/data/executable/C/*.hs
