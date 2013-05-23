@@ -8,7 +8,6 @@ import Data.Functor ((<$>))
 import Data.Maybe (catMaybes)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
-import System.IO (openFile, hGetContents, IOMode(..))
 import System.IO.Temp (withSystemTempDirectory)
 
 import Distribution.Compat.ReadP
@@ -27,7 +26,7 @@ parseModuleName = munch1 (\c -> isAlphaNum c || c == '.'
                                 || c == '-'  || c == '/' || c == '_')
 
 parseLine :: String -> Maybe (String, String)
-parseLine l = case [ r | (r,rest) <- readP_to_S parser l, all isSpace rest] of
+parseLine l = case [ r | (r, rest) <- readP_to_S parser l, all isSpace rest] of
   []  -> Nothing
   [r] -> Just r
   _   -> Nothing
@@ -58,5 +57,5 @@ getModuleDeps ghcPath ghcArgs files =
     exitCode <- runProcess defaultOutputHooks Nothing ghcPath ghcArgs'
     if exitCode == ExitSuccess
       then (catMaybes . map parseLine . trimLines . lines) <$>
-           (openFile tmpFile ReadMode >>= hGetContents)
+           (readFile tmpFile)
       else return []
