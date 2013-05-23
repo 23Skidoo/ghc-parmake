@@ -14,9 +14,17 @@ import System.IO.Temp (withSystemTempDirectory)
 import Distribution.Compat.ReadP
 import GHC.ParMake.Util (defaultOutputHooks, runProcess)
 
+
+-- TODO This random choice of characters is *insane*, this will NOT WORK when
+--      some unexpected character is in the filename.
+--      Worse even, `parseLine` will just return Nothing, silencing the
+--      problem and making ghc-parmake exit with code 1 without reason.
+--
+--      This filename parsing and "careful" parsing (returning Nothing by
+--      default instead of erroring) must be changed!
 parseModuleName :: ReadP r String
 parseModuleName = munch1 (\c -> isAlphaNum c || c == '.'
-                                || c == '-'  || c == '/')
+                                || c == '-'  || c == '/' || c == '_')
 
 parseLine :: String -> Maybe (String, String)
 parseLine l = case [ r | (r,rest) <- readP_to_S parser l, all isSpace rest] of
