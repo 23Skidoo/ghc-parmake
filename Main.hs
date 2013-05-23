@@ -148,7 +148,9 @@ main =
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps (ghcPath args) ghcArgs files
-     when (null deps) $ exitFailure
+     when (null deps) $ do
+      hPutStrLn stderr "ghc-parmake: no dependencies"
+      exitFailure
 
      debug' v ("Parsed dependencies:\n" ++ show deps)
      let plan = BuildPlan.new deps
