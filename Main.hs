@@ -147,7 +147,7 @@ main =
        exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
 
      debug' v "Running ghc -M..."
-     deps <- Parse.getModuleDeps (ghcPath args) ghcArgs files
+     deps <- Parse.getModuleDeps v (ghcPath args) ghcArgs files
      when (null deps) $ do
       hPutStrLn stderr "ghc-parmake: no dependencies"
       exitFailure
