@@ -143,7 +143,7 @@ runProcess outHooks cwd path args = do
       -- so if the process writes to stderr we do not block.
 
       hClose inh
-      err <- hGetContents errh
+      err <- hGetContents errh -- lazy IO!
       out <- hGetContents outh
 
       mvErr <- newEmptyMVar
@@ -156,6 +156,11 @@ runProcess outHooks cwd path args = do
       -- wait for both to finish, in either order
       _ <- takeMVar mvOut
       _ <- takeMVar mvErr
+
+      -- Close the handles (which *might* get garbage collected too early
+      -- otherwise due to lazy IO - so we close them just in case).
+      hClose errh
+      hClose outh
 
       -- wait for the program to terminate
       exitcode <- waitForProcess pid
