@@ -120,6 +120,15 @@ guessOutputFilename Nothing _   = "a.out"
 fatal :: String -> IO ()
 fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 
+-- | All flags conflicting with `ghc -M`.
+-- Obtained from ghc/Main.hs, `data PostLoadMode`, must be kept up to date:
+-- All modes that are not `DoMkDependHS` (`-M`) are conflicting
+-- (apart from `--make`).
+flagsConflictingWithM :: [String]
+flagsConflictingWithM = [ "--show-iface", "-E", "-C", "-S", "-c"
+                        , "--interactive", "-e", "--abi-hash"
+                        ]
+
 -- Program entry point.
 
 main :: IO ()
@@ -140,7 +149,7 @@ main =
      when (null files) $
        exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) ghcArgs
 
-     when ("-c" `elem` ghcArgs) $
+     when (any (`elem` ghcArgs) flagsConflictingWithM) $
        -- "-c" is already passed in, we just behave like a normal GHC here,
        -- since "-c" forbids "-M" (ghc: on the commandline: cannot use `-M' with `-c').
        -- This also happens e.g. when cabal compiles a c source file via GHC.
