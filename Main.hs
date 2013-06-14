@@ -137,23 +137,28 @@ main =
      let args = parseArgs argv
      let (ghcArgs, files) = getGhcArgs argv
      let v = verbosity $ args
+
+     -- Cases in which we just want to pass on all arguments to GHC and be
+     -- as transparent as possible:
+     --
+     -- * --version or --numeric-version is used
+     --   (e.g. cabal does this to determine the GHC version)
+     -- * No input files are given
+     -- * An option conflicting with "-M" is given
+     when ("--version" `elem` ghcArgs ||
+           "--numeric-version" `elem` ghcArgs ||
+           null files ||
+           any (`elem` ghcArgs) flagsConflictingWithM
+          ) $
+       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
+
+     -- We must not print this (or any other output) before handling the
+     -- skip-to-GHC cases above.
      debug' v $ "Parsed args: " ++ show args
 
      when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
      when (printUsage args)     $ usage >> exitSuccess
      when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
-
-     -- Allow invocations without files, such as --version.
-     -- This is important to be available for cabal to determine the GHC version
-     -- when used like cabal build --with-ghc=/path/to/ghc-parmake.
-     when (null files) $
-       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) ghcArgs
-
-     when (any (`elem` ghcArgs) flagsConflictingWithM) $
-       -- "-c" is already passed in, we just behave like a normal GHC here,
-       -- since "-c" forbids "-M" (ghc: on the commandline: cannot use `-M' with `-c').
-       -- This also happens e.g. when cabal compiles a c source file via GHC.
-       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps v (ghcPath args) ghcArgs files
