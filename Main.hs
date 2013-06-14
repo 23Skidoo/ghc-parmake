@@ -106,7 +106,7 @@ usage =
   "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
   "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
-  "-v[N]            - Set verbosity to N " ++ 
+  "-v[N]            - Set verbosity to N " ++
   "(both for GHC and ghc-parmake itself).\n" ++
   "--help           - Print usage information.\n" ++
   "-V               - Print version information.\n" ++
