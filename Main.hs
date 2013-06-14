@@ -127,6 +127,7 @@ fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 flagsConflictingWithM :: [String]
 flagsConflictingWithM = [ "--show-iface", "-E", "-C", "-S", "-c"
                         , "--interactive", "-e", "--abi-hash"
+                        , "--info"
                         ]
 
 -- Program entry point.
