@@ -4,7 +4,7 @@ module GHC.ParMake.Engine
        where
 
 import Control.Concurrent (forkIO, newChan, readChan, writeChan, Chan)
-import Control.Monad (foldM, forever, forM_, when)
+import Control.Monad (foldM, forever, forM_)
 import System.Exit (ExitCode(..))
 import System.FilePath (dropExtension)
 
@@ -99,12 +99,10 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
                    ++ replicate (16 - length tName) ' '
                    ++ " ( " ++ tSrc ++ ", " ++ tId ++ " )\n"
          isUpToDate <- upToDateCheck tId tDeps
-         if not isUpToDate
-           then
-           do noticeRaw outHooks verbosity msg
-              runGHC ("-c":tSrc:ghcArgs)
-           else
-           return ExitSuccess
+         if isUpToDate
+           then return ExitSuccess
+           else do noticeRaw outHooks verbosity msg
+                   runGHC ("-c":tSrc:ghcArgs)
 
     buildProgram :: FilePath -> IO ExitCode
     buildProgram outputFilename =
@@ -113,11 +111,12 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
 -- One-way worker -> controller communication.
 data ControlMessage = ModuleCompiled Target | BuildCompleted
                     | CompileFailed Target ExitCode | BuildFailed ExitCode
+                    deriving (Show)
 type ControlChan = Chan ControlMessage
 
-controlThread :: BuildPlan -> FilePath -> ControlChan -> WorkerChan
+controlThread :: BuildPlan -> Maybe FilePath -> ControlChan -> WorkerChan
                  -> IO ExitCode
-controlThread p outputFilename cch wch =
+controlThread p m'outputFilename cch wch =
   do let rdy = BuildPlan.ready p
      -- Give worker threads initial tasks.
      curNum <- postTasks rdy 1
@@ -143,10 +142,28 @@ controlThread p outputFilename cch wch =
                 let rdy   = BuildPlan.ready plan'
                 curNum'  <- postTasks rdy curNum
                 let plan'' = BuildPlan.markReadyAsBuilding plan'
-                when (null rdy && BuildPlan.numBuilding plan'' == 0)
-                  (writeChan wch (BuildProgram outputFilename
-                                  $ BuildPlan.objects plan''))
-                go plan'' curNum'
+
+                -- Check if there is more to do.
+                if (null rdy && BuildPlan.numBuilding plan'' == 0)
+
+                  -- All modules are done.
+                  then
+                    -- Do we want to build an executable?
+                    -- If yes, queue this as the last thing to do before shutting down.
+                    case m'outputFilename of
+                      Nothing             -> return ExitSuccess
+                      Just outputFilename -> do
+                        writeChan wch $ BuildProgram outputFilename
+                                                     (BuildPlan.objects plan'')
+                        -- Wait for the response to BuildProgram.
+                        -- It must only be build success or failure.
+                        buildProgramMsg <- readChan cch
+                        case buildProgramMsg of
+                          BuildFailed c  -> return c
+                          BuildCompleted -> return ExitSuccess
+                          x              -> error $ "parmake: Unexpected BuildProgram response: " ++ show x
+
+                  else go plan'' curNum'
 
            CompileFailed t c -> waitAndExit (BuildPlan.markCompleted plan t) c
 
@@ -176,9 +193,9 @@ controlThread p outputFilename cch wch =
 
 -- | Given a BuildPlan, perform the compilation.
 compile :: Verbosity -> BuildPlan -> Int
-           -> FilePath -> [String] -> [FilePath] -> FilePath
+           -> FilePath -> [String] -> [FilePath] -> Maybe FilePath
            -> IO ExitCode
-compile verbosity plan numJobs ghcPath ghcArgs files outputFilename =
+compile verbosity plan numJobs ghcPath ghcArgs files m'outputFilename =
   do
     -- Init comm. channels
     workerChan  <- newChan
@@ -196,7 +213,11 @@ compile verbosity plan numJobs ghcPath ghcArgs files outputFilename =
     _ <- ($) forkIO $ logThread logChan
 
     -- Start the control thread.
-    controlThread plan outputFilename controlChan workerChan
+    controlThread plan m'outputFilename controlChan workerChan
+
+    -- Not that we don't explicitly shut down the worker threads;
+    -- the runtime just kills them when the main thread exits.
+    -- That's not so clean but it works for now.
   where
     totNum :: String
     totNum = show $ BuildPlan.size plan
