@@ -112,10 +112,10 @@ usage =
   "-V               - Print version information.\n" ++
   "\nOther options are passed to GHC unmodified.\n"
 
-guessOutputFilename :: Maybe FilePath -> [FilePath] -> FilePath
-guessOutputFilename (Just n) _  = n
-guessOutputFilename Nothing [n] = dropExtension n
-guessOutputFilename Nothing _   = "a.out"
+guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
+guessOutputFilename (Just n) _  = Just n
+guessOutputFilename Nothing [n] = Just (dropExtension n)
+guessOutputFilename Nothing _   = Nothing
 
 fatal :: String -> IO ()
 fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
