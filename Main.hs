@@ -121,14 +121,39 @@ fatal :: String -> IO ()
 fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 
 -- | All flags conflicting with `ghc -M`.
--- Obtained from ghc/Main.hs, `data PostLoadMode`, must be kept up to date:
+-- Obtained from the man page (listed in the same order as they appear there)
+-- and ghc/Main.hs, `data PostLoadMode`:
 -- All modes that are not `DoMkDependHS` (`-M`) are conflicting
 -- (apart from `--make`).
 flagsConflictingWithM :: [String]
-flagsConflictingWithM = [ "--show-iface", "-E", "-C", "-S", "-c"
-                        , "--interactive", "-e", "--abi-hash"
-                        , "--info"
-                        ]
+flagsConflictingWithM =
+  -- "Help and verbosity options"
+  [ "-?"
+  , "--help"
+  , "-V"
+  , "--supported-extensions"
+  , "--supported-languages"
+  , "--info"
+  , "--version"
+  , "--numeric-version"
+  , "--print-libdir"
+
+  -- "Which phases to run"
+  , "-E"
+  , "-C"
+  , "-S"
+  , "-c"
+
+  -- "Alternative modes of operation"
+  , "--interactive"
+  , "-e"
+
+  -- "Interface file options"
+  , "--show-iface"
+
+  -- Undocumented?
+  , "--abi-hash"
+  ]
 
 -- Program entry point.
 
@@ -145,12 +170,8 @@ main =
      -- * --version or --numeric-version is used
      --   (e.g. cabal does this to determine the GHC version)
      -- * No input files are given
-     -- * An option conflicting with "-M" is given
-     when ("--version" `elem` ghcArgs ||
-           "--numeric-version" `elem` ghcArgs ||
-           null files ||
-           any (`elem` ghcArgs) flagsConflictingWithM
-          ) $
+     -- * An option conflicting with "-M" is given (we include --version here)
+     when (null files || any (`elem` ghcArgs) flagsConflictingWithM) $
        exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
 
      -- We must not print this (or any other output) before handling the
