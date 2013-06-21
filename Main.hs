@@ -129,7 +129,7 @@ flagsConflictingWithM :: [String]
 flagsConflictingWithM =
   -- "Help and verbosity options"
   [ "-?"
-  , "-help"
+  , "--help"
   , "-V"
   , "--supported-extensions"
   , "--supported-languages"
