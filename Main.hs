@@ -66,7 +66,7 @@ getGhcArgs :: [String] -> ([String],[String])
 getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
                   in (reverse as, reverse fs)
   where
-    pgmSuffixes =  ["L", "P", "c", "m", "s", "a", "l", "dll", "F", "windres"]
+    pgmSuffixes = ["L", "P", "c", "m", "s", "a", "l", "dll", "F", "windres"]
     optsWithArg = [ "-odir", "-hidir", "-ohi", "-stubdir", "-outputdir"
                   , "-tmpdir", "-osuf", "-hisuf", "-hcsuf"
                   , "-package", "-package-db", "-package-id", "-hide-package"
