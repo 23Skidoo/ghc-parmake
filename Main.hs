@@ -128,15 +128,14 @@ fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 flagsConflictingWithM :: [String]
 flagsConflictingWithM =
   -- "Help and verbosity options"
-  [ "-?"
-  , "--help"
-  , "-V"
+  [ "?"
   , "--supported-extensions"
   , "--supported-languages"
   , "--info"
   , "--version"
   , "--numeric-version"
   , "--print-libdir"
+  -- -V and --help are not included here because this program uses them
 
   -- "Which phases to run"
   , "-E"
@@ -167,10 +166,10 @@ main =
      -- Cases in which we just want to pass on all arguments to GHC and be
      -- as transparent as possible:
      --
-     -- * --version or --numeric-version is used
+     -- * --numeric-version is used
      --   (e.g. cabal does this to determine the GHC version)
      -- * No input files are given
-     -- * An option conflicting with "-M" is given (we include --version here)
+     -- * An option conflicting with "-M" is given
      when (null files || any (`elem` ghcArgs) flagsConflictingWithM) $
        exitWith =<< runProcess defaultOutputHooks Nothing
                                (ghcPath args) (ghcArgs ++ files)
