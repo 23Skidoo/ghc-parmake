@@ -163,6 +163,11 @@ main =
      let (ghcArgs, files) = getGhcArgs argv
      let v = verbosity $ args
 
+     when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
+     when (printUsage args)     $ usage >> exitSuccess
+
+     when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
+
      -- Cases in which we just want to pass on all arguments to GHC and be
      -- as transparent as possible:
      --
@@ -170,17 +175,17 @@ main =
      --   (e.g. cabal does this to determine the GHC version)
      -- * No input files are given
      -- * An option conflicting with "-M" is given
-     when (null files || any (`elem` ghcArgs) flagsConflictingWithM) $
-       exitWith =<< runProcess defaultOutputHooks Nothing
-                               (ghcPath args) (ghcArgs ++ files)
+     let passToGhc = exitWith =<<
+           runProcess defaultOutputHooks Nothing (ghcPath args)
+                                                 (ghcArgs ++ files)
+
+     when (any (`elem` ghcArgs) flagsConflictingWithM) $ passToGhc
 
      -- We must not print this (or any other output) before handling the
      -- skip-to-GHC cases above.
      debug' v $ "Parsed args: " ++ show args
 
-     when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
-     when (printUsage args)     $ usage >> exitSuccess
-     when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
+     when (null files) $ passToGhc
 
      debug' v "Running ghc -M..."
      deps <- Parse.getModuleDeps v (ghcPath args) ghcArgs files
