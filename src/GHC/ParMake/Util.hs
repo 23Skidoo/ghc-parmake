@@ -157,11 +157,6 @@ runProcess outHooks cwd path args = do
       _ <- takeMVar mvOut
       _ <- takeMVar mvErr
 
-      -- Close the handles (which *might* get garbage collected too early
-      -- otherwise due to lazy IO - so we close them just in case).
-      hClose errh
-      hClose outh
-
       -- wait for the program to terminate
       exitcode <- waitForProcess pid
       return exitcode
