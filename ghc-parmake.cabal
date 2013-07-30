@@ -1,5 +1,5 @@
 Name:                   ghc-parmake
-Version:                0.1.9
+Version:                0.2.0
 Synopsis:               A parallel wrapper for 'ghc --make'.
 
 Description:            'ghc-parmake' is a parallel wrapper for 'ghc --make'
@@ -58,12 +58,23 @@ Library
     GHC-options:        -fwarn-tabs
 
 Executable ghc-parmake
-  Main-is:              Main.hs
-  Build-depends:        ghc-parmake == 0.1.9,
+  Main-is:              GhcParmake.hs
+  Build-depends:        ghc-parmake == 0.2.0,
                         array >= 0.3 && < 0.5, base >= 4 && < 5,
                         containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
+  GHC-options:          -Wall -threaded -rtsopts
+  if impl(ghc >= 6.8)
+    GHC-options:        -fwarn-tabs
+
+Executable ghc-server
+  Main-is:              GhcServer.hs
+  Build-depends:        ghc-parmake == 0.2.*,
+                        ghc == 7.*,
+                        ghc-paths >= 0.1.0.9,
+                        base >= 4 && < 5,
+                        process >= 1 && < 2
   GHC-options:          -Wall -threaded -rtsopts
   if impl(ghc >= 6.8)
     GHC-options:        -fwarn-tabs
@@ -76,7 +87,7 @@ Test-suite tests
                         filepath >= 1 && < 2,
                         directory >= 1.1 && < 2,
                         process >= 1 && < 2,
-                        ghc-parmake == 0.1.9,
+                        ghc-parmake == 0.2.0,
                         test-framework >= 0.4.1 && < 0.9,
                         test-framework-quickcheck2 >= 0.2.10 && < 0.4,
                         test-framework-hunit >= 0.2.6 && < 0.4,

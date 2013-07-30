@@ -1,18 +1,26 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 -- Parallel 'make' engine.
 
 module GHC.ParMake.Engine
        where
 
+import Prelude hiding (catch)
 import Control.Concurrent (forkIO, newChan, readChan, writeChan, Chan)
-import Control.Monad (foldM, forever, forM_)
+import Control.Exception (SomeException, assert, bracket, catch)
+import Control.Monad (foldM, forever, forM_, when)
 import System.Exit (ExitCode(..))
 import System.FilePath (dropExtension)
+import System.IO (BufferMode (LineBuffering), Handle,
+                  hClose, hGetLine, hPutStrLn,
+                  hSetBinaryMode, hSetBuffering)
+import System.Process (runInteractiveProcess)
 
 import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..)
                          , runProcess, upToDateCheck, UpToDateStatus(..)
-                         , Verbosity, debug, noticeRaw)
+                         , Verbosity, debug, noticeRaw, warn)
 
 -- The program consists of several threads which communicate via Chans. There
 -- are several worker threads, which compile the modules. A single control
@@ -57,24 +65,28 @@ workerThread :: OutputHooks -> Verbosity -> String
                 -> FilePath -> [String] -> [FilePath]
                 -> WorkerChan -> ControlChan
                 -> IO ()
-workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
-  = forever $ do
-    task <- readChan wch
-    case task of
-      BuildModule curNum target ->
-        do exitCode <- buildModule curNum target
-           onSuccess exitCode (ModuleCompiled target)
-             (CompileFailed target exitCode)
+workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch = do
+  topHandler . withGHCServer ghcArgs $ \inh outh errh ->
+    forever $ do
+      task <- readChan wch
+      case task of
+        BuildModule curNum target ->
+          do exitCode <- buildModule inh outh errh curNum target
+             onSuccess exitCode (ModuleCompiled target)
+               (CompileFailed target exitCode)
 
-      BuildProgram outputFilename _objects ->
-        do exitCode <- buildProgram outputFilename
-           onSuccess exitCode (BuildCompleted) (BuildFailed exitCode)
+        BuildProgram outputFilename _objects ->
+          do exitCode <- buildProgram outputFilename
+             onSuccess exitCode (BuildCompleted) (BuildFailed exitCode)
   where
 
-    runGHC :: [String] -> IO ExitCode
-    runGHC args =
-      do debug outHooks verbosity $ show (ghcPath:args)
-         runProcess outHooks Nothing ghcPath args
+    topHandler :: IO () -> IO ()
+    topHandler act =
+      act `catch`
+      (\(e :: SomeException) -> do
+          warn outHooks verbosity ("Exception in 'workerThread.topHandler': "
+                                   ++ show e)
+          writeChan cch (BuildFailed (ExitFailure 1)))
 
     onSuccess :: ExitCode -> ControlMessage -> ControlMessage -> IO ()
     onSuccess exitCode msgSucc msgFail =
@@ -88,8 +100,8 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
         slashToDot '/' = '.'
         slashToDot c   = c
 
-    buildModule :: Int -> Target -> IO ExitCode
-    buildModule curNum target =
+    buildModule :: Handle -> Handle -> Handle -> Int -> Target -> IO ExitCode
+    buildModule inh outh errh curNum target =
       do let tId   = BuildPlan.targetId target
          let tSrc  = BuildPlan.source target
          let tDeps = BuildPlan.allDepends target
@@ -99,17 +111,104 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
                           ++ replicate (16 - length tName) ' '
                           ++ " ( " ++ tSrc ++ ", " ++ tId ++ " ) [" ++ reason ++ "]\n"
              compileBecause reason = do noticeRaw outHooks verbosity (msg reason)
-                                        runGHC ("-c":tSrc:ghcArgs)
+                                        compileWithGhcServer curNum tSrc inh outh errh
          upToDateStatus <- upToDateCheck tId tDeps
          case upToDateStatus of
            UpToDate             -> return ExitSuccess
            TargetDoesNotExist   -> compileBecause "new"
            NewerDependency file -> compileBecause (file ++ " changed")
-             where
+
+    -- See the 'protocol for communication' note in GhcServer.hs.
+    compileWithGhcServer :: Int -> FilePath -> Handle -> Handle -> Handle
+                            -> IO ExitCode
+    compileWithGhcServer jobNum tSrc inh outh errh =
+      submitJob >> redirectGHCOutput >> parseResult
+      where
+        submitJob :: IO ()
+        submitJob = do
+          debug outHooks verbosity $ "Submitting job number " ++ (show jobNum)
+          hPutStrLn inh ("JOB " ++ show jobNum)
+          hPutStrLn inh ("COMPILE " ++ tSrc)
+          hPutStrLn inh "END"
+
+        redirectGHCOutput :: IO ()
+        redirectGHCOutput = do
+          debug outHooks verbosity $
+            "Reading compiler output for job number " ++ (show jobNum)
+          header <- hGetLine errh
+          case header of
+            'O':'U':'T':'P':'U':'T':' ':path -> assert (path == tSrc) (return ())
+            other -> unexpected other
+
+          output <- go []
+          mapM_ (putStrLnErrHook outHooks) output
+
+            where
+              err e = error $ "GHC.ParMake.Engine.redirectGHCOutput: " ++ e
+              unexpected inp = err $ "unexpected input: " ++ show inp
+
+              go acc = do
+                l <- hGetLine errh
+                case l of
+                  "END" -> return (reverse acc)
+                  _     -> go (l:acc)
+
+        parseResult :: IO ExitCode
+        parseResult = do
+          debug outHooks verbosity $
+            "Parsing result for the job number " ++ (show jobNum)
+          header <- hGetLine outh
+          let jobNum' = case header of
+                'J':'O':'B':'_':'D':'O':'N':'E':' ':rest -> read rest
+                other -> unexpected other
+          when (jobNum /= jobNum') $
+            err "job numbers mismatch"
+
+          resStr <- hGetLine outh
+          let res = case resStr of
+                'S':'U':'C':'C':'E':'S':'S':' ':path ->
+                  assert (path == tSrc) ExitSuccess
+                'F':'A':'I':'L':'U':'R':'E':' ':path ->
+                  assert (path == tSrc) (ExitFailure 1)
+                other -> unexpected other
+
+          end <- hGetLine outh
+          case end of
+            "END" -> return res
+            other -> unexpected other
+
+            where
+              err e = error $ "GHC.ParMake.Engine.parseResult: " ++ e
+              unexpected inp = err $ "unexpected input: " ++ show inp
+
 
     buildProgram :: FilePath -> IO ExitCode
     buildProgram outputFilename =
       runGHC ("--make":"-o":outputFilename:(files ++ ghcArgs))
+
+    runGHC :: [String] -> IO ExitCode
+    runGHC args =
+      do debug outHooks verbosity $ show (ghcPath:args)
+         runProcess outHooks Nothing ghcPath args
+
+    withGHCServer :: [String] ->
+                     (Handle -> Handle -> Handle -> IO ()) -> IO ()
+    withGHCServer args action = do
+      debug outHooks verbosity $ show (ghcServerPath:args)
+      bracket
+        (runInteractiveProcess ghcServerPath args Nothing Nothing)
+        (\(inh, outh, errh, _) -> hClose inh >> hClose outh >> hClose errh)
+        (\(inh, outh, errh, _) -> do hSetBinaryMode inh  False
+                                     hSetBinaryMode outh False
+                                     hSetBinaryMode errh False
+                                     hSetBuffering inh  LineBuffering
+                                     hSetBuffering outh LineBuffering
+                                     hSetBuffering errh LineBuffering
+                                     action inh outh errh)
+
+    ghcServerPath :: FilePath
+    ghcServerPath = "ghc-server"
+
 
 -- One-way worker -> controller communication.
 data ControlMessage = ModuleCompiled Target | BuildCompleted
