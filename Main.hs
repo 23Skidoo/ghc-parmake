@@ -172,7 +172,8 @@ main =
      -- * No input files are given
      -- * An option conflicting with "-M" is given (we include --version here)
      when (null files || any (`elem` ghcArgs) flagsConflictingWithM) $
-       exitWith =<< runProcess defaultOutputHooks Nothing (ghcPath args) (ghcArgs ++ files)
+       exitWith =<< runProcess defaultOutputHooks Nothing
+                               (ghcPath args) (ghcArgs ++ files)
 
      -- We must not print this (or any other output) before handling the
      -- skip-to-GHC cases above.
