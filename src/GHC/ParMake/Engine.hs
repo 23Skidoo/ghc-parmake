@@ -61,11 +61,12 @@ logThread lch = forever $ do
 data WorkerTask = BuildModule Int Target | BuildProgram FilePath [FilePath]
 type WorkerChan = Chan WorkerTask
 
-workerThread :: OutputHooks -> Verbosity -> String
+workerThread :: OutputHooks -> Verbosity -> String -> FilePath
                 -> FilePath -> [String] -> [FilePath]
                 -> WorkerChan -> ControlChan
                 -> IO ()
-workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch = do
+workerThread outHooks verbosity totNum ghcServerPath
+             ghcPath ghcArgs files wch cch = do
   topHandler . withGHCServer ghcArgs $ \inh outh errh ->
     forever $ do
       task <- readChan wch
@@ -206,10 +207,6 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch = do
                                      hSetBuffering errh LineBuffering
                                      action inh outh errh)
 
-    ghcServerPath :: FilePath
-    ghcServerPath = "ghc-server"
-
-
 -- One-way worker -> controller communication.
 data ControlMessage = ModuleCompiled Target | BuildCompleted
                     | CompileFailed Target ExitCode | BuildFailed ExitCode
@@ -297,10 +294,11 @@ controlThread p mOutputFilename cch wch =
       else return exitCode
 
 -- | Given a BuildPlan, perform the compilation.
-compile :: Verbosity -> BuildPlan -> Int
+compile :: Verbosity -> BuildPlan -> Int -> FilePath
            -> FilePath -> [String] -> [FilePath] -> Maybe FilePath
            -> IO ExitCode
-compile verbosity plan numJobs ghcPath ghcArgs files mOutputFilename =
+compile verbosity plan numJobs ghcServerPath 
+        ghcPath ghcArgs files mOutputFilename =
   do
     -- Init comm. channels
     workerChan  <- newChan
@@ -312,7 +310,8 @@ compile verbosity plan numJobs ghcPath ghcArgs files mOutputFilename =
       (\n -> forkIO $ workerThread
              (logThreadOutputHooks
               (if numJobs == 1 then "" else "[" ++ show n ++ "]") logChan)
-             verbosity totNum ghcPath ghcArgs files workerChan controlChan)
+             verbosity totNum ghcServerPath
+             ghcPath ghcArgs files workerChan controlChan)
 
     -- Fork off log thread.
     _ <- ($) forkIO $ logThread logChan

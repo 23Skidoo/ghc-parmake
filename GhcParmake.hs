@@ -26,6 +26,7 @@ data Args = Args {
   printUsage     :: Bool,
   numJobs        :: Int,
   ghcPath        :: String,
+  ghcServerPath  :: String,
   extraDepends   :: [String],
   outputFilename :: Maybe String,
   osuf           :: String,
@@ -39,6 +40,7 @@ defaultArgs = Args {
   printUsage     = False,
   numJobs        = 1,
   ghcPath        = "ghc",
+  ghcServerPath  = "ghc-server",
   extraDepends   = [],
   outputFilename = Nothing,
   osuf           = "o",
@@ -69,6 +71,10 @@ parseArgs l = go l defaultArgs
     go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
     go (a:as) acc
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
+                                       go (o:(tail p'):as) acc
+    go ("--ghc-server-path":p:as) acc= go as $ acc { ghcServerPath = p }
+    go (a:as) acc | "--ghc-server-path=" `isPrefixOf` a
+                                     = let (o,p') = break (== '=') a in
                                        go (o:(tail p'):as) acc
     go (_:as) acc                    = go as acc
 
@@ -142,14 +148,15 @@ usage =
   putStr $ "Usage: ghc-parmake [OPTIONS] FILES\n" ++
   "A parallel wrapper around 'ghc --make'.\n\n" ++
   "Options: \n" ++
-  "-j N             - Run N jobs in parallel.\n" ++
-  "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
-  "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
+  "-j N                    - Run N jobs in parallel.\n" ++
+  "--ghc-path=PATH         - Set the path to the ghc executable.\n" ++
+  "--ghc-server-path=PATH  - Set the path to the ghc-server executable.\n" ++
+  "-vv[N]                  - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
-  "-v[N]            - Set verbosity to N " ++
+  "-v[N]                   - Set verbosity to N " ++
   "(both for GHC and ghc-parmake itself).\n" ++
-  "--help           - Print usage information.\n" ++
-  "-V               - Print version information.\n" ++
+  "--help                  - Print usage information.\n" ++
+  "-V                      - Print version information.\n" ++
   "\nOther options are passed to GHC unmodified.\n"
 
 -- TODO: To fully emulate GHC's behaviour, we must know whether the input module
@@ -263,7 +270,7 @@ main =
      debug' v ("Produced a build plan:\n" ++ show plan)
 
      debug' v "Building..."
-     exitCode <- Engine.compile v plan (numJobs args)
+     exitCode <- Engine.compile v plan (numJobs args) (ghcServerPath args)
                  (ghcPath args) parmakeGhcArgs files (outputFilename args)
      when (exitCode /= ExitSuccess) $ exitWith exitCode
 

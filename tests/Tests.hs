@@ -96,6 +96,9 @@ pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
 makeProgram :: String
 makeProgram = "dist" </> "build" </> "ghc-parmake" </> "ghc-parmake"
 
+serverProgram :: String
+serverProgram = "dist" </> "build" </> "ghc-server" </> "ghc-server"
+
 recreateDirectory :: FilePath -> IO ()
 recreateDirectory dir =
   do dirExists <- doesDirectoryExist dir
@@ -110,12 +113,21 @@ getExitCode program args workingDir =
                               hGetContents errh >>= putStrLn
                               return exitCode)
 
+getExitCode' :: FilePath -> [String] -> FilePath -> IO ExitCode
+getExitCode' program args workingDir =
+  do pid <- runProcess program args (Just workingDir)
+            Nothing Nothing Nothing Nothing
+     waitForProcess pid
+
 mkTestCase :: FilePath -> Int -> Assertion
 mkTestCase dirName numJobs =
-  do t1 <- doesDirectoryExist testDir
+  do serverProgramAbs <- canonicalizePath serverProgram
+     t1 <- doesDirectoryExist testDir
      t2 <- doesFileExist makeProgram
+     t3 <- doesFileExist serverProgramAbs
      assertBool ("Directory '" ++ testDir ++ "' doesn't exist!") t1
      assertBool ("Executable '" ++ makeProgram ++ "' doesn't exist!") t2
+     assertBool ("Executable '" ++ serverProgram ++ "' doesn't exist!") t3
 
      -- Try building the program with different options.
      buildProgram []
