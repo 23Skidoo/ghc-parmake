@@ -6,7 +6,7 @@ module GHC.ParMake.Parse (getModuleDeps)
 import Data.Char (isAlphaNum, isSpace)
 import Data.Functor ((<$>))
 import Data.Maybe (catMaybes)
-import System.Exit (ExitCode(..))
+import System.Exit (ExitCode(..), exitFailure)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -64,4 +64,4 @@ getModuleDeps v ghcPath ghcArgs files =
     if exitCode == ExitSuccess
       then (catMaybes . map parseLine . trimLines . lines) <$>
            (readFile tmpFile)
-      else return []
+      else exitFailure
