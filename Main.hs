@@ -187,7 +187,7 @@ main =
 
      when (null files) $ passToGhc
 
-     debug' v "Running ghc -M..."
+     debug' v "Running ghc -M (twice)..."
      deps <- Parse.getModuleDeps v (ghcPath args) ghcArgs files
      when (null deps) $ do
       hPutStrLn stderr "ghc-parmake: no dependencies"

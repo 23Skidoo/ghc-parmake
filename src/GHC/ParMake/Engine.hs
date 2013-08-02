@@ -92,7 +92,7 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
     buildModule curNum target =
       do let tId   = BuildPlan.targetId target
          let tSrc  = BuildPlan.source target
-         let tDeps = BuildPlan.depends target
+         let tDeps = BuildPlan.allDepends target
          let tName = slashesToDots . dropExtension $ tSrc
          let msg = "[" ++ show curNum ++ " of "++ totNum ++ "] Compiling "
                    ++ tName
