@@ -126,6 +126,9 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
         -- in the graph.
         countNumDeps = subtract 1 . length . depends
 
+    -- TODO: It is possible to create a BuildPlan that is non-empty, but has
+    --       no buildable parts and thus is stuck.
+    --       We should raise some error when that happens.
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
       where hasSingleSourceDep (_,t) = case depends t of
