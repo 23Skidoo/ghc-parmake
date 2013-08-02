@@ -132,6 +132,8 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
       where hasSingleSourceDep (_,t) = case depends t of
+              -- TODO: This invariant should be enforced everywhere.
+              []  -> error "BuildPlan: BUG: A target should never have 0 dependencies"
               [d] -> (takeExtension d) `elem` sourceExts
               _   -> False
     buildingSet = IntSet.empty
