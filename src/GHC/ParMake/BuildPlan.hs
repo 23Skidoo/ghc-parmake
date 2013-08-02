@@ -19,7 +19,7 @@ import Data.Graph (Graph)
 import Data.Function (on)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
-import Data.List (find, groupBy, sortBy)
+import Data.List (find, groupBy, sort, sortBy)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
@@ -153,7 +153,8 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
 -- | Given a list of (target, dependency) pairs, produce a list of Targets.
 depsToTargets :: [(TargetId, TargetId)] -> [Target]
 depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
-                groupBy ((==) `on` fst)
+                groupBy ((==) `on` fst) .
+                sort -- sort to not assume Makefile is not in order
   where
     mkModuleTarget tId tDeps = assert check (Target tId tSrc tDeps)
       where
