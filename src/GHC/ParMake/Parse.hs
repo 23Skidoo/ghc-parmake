@@ -64,4 +64,4 @@ getModuleDeps v ghcPath ghcArgs files =
     if exitCode == ExitSuccess
       then (catMaybes . map parseLine . trimLines . lines) <$>
            (readFile tmpFile)
-      else return []
+      else error "GHC.ParMake.Parse.getModuleDeps: ghc -M failed"
