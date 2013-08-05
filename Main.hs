@@ -112,10 +112,10 @@ usage =
   "-V               - Print version information.\n" ++
   "\nOther options are passed to GHC unmodified.\n"
 
-guessOutputFilename :: Maybe FilePath -> [FilePath] -> FilePath
-guessOutputFilename (Just n) _  = n
-guessOutputFilename Nothing [n] = dropExtension n
-guessOutputFilename Nothing _   = "a.out"
+guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
+guessOutputFilename (Just n) _  = Just n
+guessOutputFilename Nothing [n] = Just (dropExtension n)
+guessOutputFilename Nothing _   = Nothing
 
 fatal :: String -> IO ()
 fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
@@ -128,15 +128,14 @@ fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 flagsConflictingWithM :: [String]
 flagsConflictingWithM =
   -- "Help and verbosity options"
-  [ "-?"
-  , "--help"
-  , "-V"
+  [ "?"
   , "--supported-extensions"
   , "--supported-languages"
   , "--info"
   , "--version"
   , "--numeric-version"
   , "--print-libdir"
+  -- -V and --help are not included here because this program uses them
 
   -- "Which phases to run"
   , "-E"
@@ -164,16 +163,20 @@ main =
      let (ghcArgs, files) = getGhcArgs argv
      let v = verbosity $ args
 
+     when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
+
      -- Cases in which we just want to pass on all arguments to GHC and be
      -- as transparent as possible:
      --
-     -- * --version or --numeric-version is used
+     -- * --numeric-version is used
      --   (e.g. cabal does this to determine the GHC version)
      -- * No input files are given
-     -- * An option conflicting with "-M" is given (we include --version here)
-     when (null files || any (`elem` ghcArgs) flagsConflictingWithM) $
-       exitWith =<< runProcess defaultOutputHooks Nothing
-                               (ghcPath args) (ghcArgs ++ files)
+     -- * An option conflicting with "-M" is given
+     let passToGhc = exitWith =<<
+           runProcess defaultOutputHooks Nothing (ghcPath args)
+                                                 (ghcArgs ++ files)
+
+     when (any (`elem` ghcArgs) flagsConflictingWithM) $ passToGhc
 
      -- We must not print this (or any other output) before handling the
      -- skip-to-GHC cases above.
@@ -181,9 +184,10 @@ main =
 
      when (printVersion args)   $ putStrLn "ghc-parmake 0.1" >> exitSuccess
      when (printUsage args)     $ usage >> exitSuccess
-     when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
 
-     debug' v "Running ghc -M..."
+     when (null files) $ passToGhc
+
+     debug' v "Running ghc -M (twice)..."
      deps <- Parse.getModuleDeps v (ghcPath args) ghcArgs files
      when (null deps) $ do
       hPutStrLn stderr "ghc-parmake: no dependencies"
