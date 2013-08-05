@@ -117,4 +117,6 @@ groupByTarget deps = Map.fromListWith (++) [ (t, [d]) | (t, d) <- deps ]
 
 -- | Merges two maps that have the same keys.
 mergeValues :: (Ord k) => Map k [a] -> Map k [b] -> Map k ([a], [b])
-mergeValues m1 m2 = Map.mergeWithKey (\_ as bs -> Just (as, bs)) (fmap (, [])) (fmap ([], )) m1 m2
+mergeValues m1 m2 = Map.unionWith (\(a,b) (x,y) -> (a ++ x, b ++ y))
+                                  (fmap (, []) m1)
+                                  (fmap ([], ) m2)
