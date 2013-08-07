@@ -13,7 +13,6 @@ import qualified Data.Array as Array
 import qualified Data.Graph as Graph
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import Control.Exception (assert)
 import Data.Array ((!))
 import Data.Graph (Graph)
 import Data.Function (on)
@@ -174,14 +173,17 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
 depsToTargets :: [Dep] -> [Target]
 depsToTargets = map mkModuleTarget
   where
-    mkModuleTarget (Dep t intDeps extDeps) = assert check (Target t tSrc intDeps extDeps)
+    mkModuleTarget (Dep t intDeps extDeps)
+      | badExtension = error $ "ghc-parmake: target must end with " ++ show objExts
+      | not depsOK   = error $ "ghc-parmake: dependencies are not OK: " ++ show intDeps
+      | otherwise    = Target t tSrc intDeps extDeps
       where
         tSrc = fromMaybe (error "No source file in dependencies!")
                $ find ((`elem` sourceExts). takeExtension) intDeps
 
-        check = (takeExtension t `elem` objExts)
-                && (length intDeps == 1
-                    || or [ takeExtension d `elem` interfaceExts | d <- intDeps ])
+        badExtension = takeExtension t `notElem` objExts
+        depsOK = length intDeps == 1
+                   || or [ takeExtension d `elem` interfaceExts | d <- intDeps ]
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
@@ -233,9 +235,10 @@ hasBuilding = not . IntSet.null . planBuilding
 
 -- | Mark a target as successfully built.
 markCompleted :: BuildPlan -> Target -> BuildPlan
-markCompleted plan target = assert check newPlan
+markCompleted plan target
+  | vertex `IntSet.notMember` planBuilding plan = error $ "ghc-parmake: BUG: vertex not in planBuilding"
+  | otherwise = newPlan
   where
-    check = vertex `IntSet.member` planBuilding plan
     vertex = fromMaybe
              (error $ "Target '" ++ targetId target ++ "' not in the graph!")
              (planVertexOf plan (targetId target))
@@ -245,9 +248,10 @@ markCompleted plan target = assert check newPlan
     deps = planGraphRev plan ! vertex
     (newReady, newNumDeps) = foldr updateNumDeps
                              (planReady plan, planNumDeps plan) deps
-    updateNumDeps curVertex (rdy, numDeps) = assert check' (ready', numDeps')
+    updateNumDeps curVertex (rdy, numDeps)
+      | oldDepsCount <= 0 = error $ "ghc-parmake: BUG: oldDepsCount is " ++ show oldDepsCount
+      | otherwise = (ready', numDeps')
       where
-        check' = oldDepsCount > 0
         oldDepsCount = numDeps IntMap.! curVertex
         newDepsCount = oldDepsCount - 1
         ready' = if newDepsCount == 0
