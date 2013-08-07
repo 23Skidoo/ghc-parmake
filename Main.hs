@@ -24,7 +24,9 @@ data Args = Args {
   printUsage     :: Bool,
   numJobs        :: Int,
   ghcPath        :: String,
-  outputFilename :: Maybe String
+  outputFilename :: Maybe String,
+  osuf           :: String,
+  hisuf          :: String
   } deriving Show
 
 defaultArgs :: Args
@@ -34,7 +36,9 @@ defaultArgs = Args {
   printUsage     = False,
   numJobs        = 1,
   ghcPath        = "ghc",
-  outputFilename = Nothing
+  outputFilename = Nothing,
+  osuf           = "o",
+  hisuf          = "hi"
   }
 
 parseArgs :: [String] -> Args
@@ -56,6 +60,8 @@ parseArgs l = go l defaultArgs
                                        acc { verbosity = parseVerbosity [n] }
     go ("-v":as) acc                 = go as $ acc { verbosity = verbose }
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
+    go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
+    go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
     go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
     go (a:as) acc
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
@@ -220,7 +226,9 @@ main =
       exitFailure
 
      debug' v ("Parsed dependencies:\n" ++ show deps)
-     let plan = BuildPlan.new deps
+     let settings = BuildPlan.Settings { BuildPlan.osuf  = osuf args
+                                       , BuildPlan.hisuf = hisuf args }
+         plan = BuildPlan.new settings deps
      debug' v ("Produced a build plan:\n" ++ show plan)
 
      debug' v "Building..."

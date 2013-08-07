@@ -1,3 +1,5 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 -- This module is modelled after Distribution.Client.InstallPlan. If/when this
 -- code becomes part of cabal-install, it'd be nice to merge both modules
 -- somehow.
@@ -7,7 +9,8 @@ module GHC.ParMake.BuildPlan
        , numCompleted, markCompleted
        , markReadyAsBuilding, numBuilding, hasBuilding
        , BuildPlan, Target, TargetId
-       , targetId, allDepends, source, object, objects)
+       , targetId, allDepends, source, object, objects
+       , Settings(..), defaultSettings)
        where
 
 import qualified Data.Array as Array
@@ -26,6 +29,18 @@ import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
 
 import GHC.ParMake.Types (Dep(..))
+
+-- | Settings for a BuildPlan
+data Settings = Settings
+  { osuf  :: String -- without dot
+  , hisuf :: String -- without dot
+  } deriving (Eq, Ord, Show)
+
+defaultSettings :: Settings
+defaultSettings = Settings
+  { osuf = "o"
+  , hisuf = "hi"
+  }
 
 type TargetId = FilePath
 type ExternalDep = FilePath
@@ -73,10 +88,22 @@ object (Target tId _ _ _) = case takeExtension tId
 objects :: BuildPlan -> [FilePath]
 objects = mapMaybe object . completed
 
-sourceExts, interfaceExts, objExts :: [String]
+sourceExts, defaultInterfaceExts, defaultObjExts :: [String]
 sourceExts    = [".hs", ".lhs", ".hs-boot", ".lhs-boot"]
-interfaceExts = [".hi", ".hi-boot"]
-objExts       = [".o", ".o-boot"]
+defaultInterfaceExts = [".hi", ".hi-boot"]
+defaultObjExts       = [".o", ".o-boot"]
+
+-- | `ext` must start with a dot.
+isValidInterfaceExt :: Settings -> String -> Bool
+isValidInterfaceExt Settings{ hisuf } ext = case ext of
+  '.':_ -> ext `elem` defaultInterfaceExts || ext == ('.':hisuf)
+  _     -> False
+
+-- | `ext` must start with a dot.
+isValidObjectExt :: Settings -> String -> Bool
+isValidObjectExt Settings{ osuf } ext = case ext of
+  '.':_ -> ext `elem` defaultObjExts || ext == ('.':osuf)
+  _     -> False
 
 -- | A graph of all dependencies between targets.
 data BuildPlan = BuildPlan {
@@ -112,8 +139,8 @@ instance Show BuildPlan where
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
-new :: [Dep] -> BuildPlan
-new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
+new :: Settings -> [Dep] -> BuildPlan
+new settings@Settings{ osuf, hisuf } deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
            numDepsMap readySet buildingSet
   where
     targetIdToVertex   = binarySearch 0 topBound
@@ -128,8 +155,11 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
         -- We don't keep '.hi' targets in the graph, only in the depends list.
         interfaceToObj tId =
           case takeExtension tId of
+            -- TODO: Should we remove this in favour of osuf/hisuf?
+            --       If yes, how do we deal with -boot files?
             ".hi"      -> replaceExtension tId ".o"
             ".hi-boot" -> replaceExtension tId ".o-boot"
+            ext | ext == '.':hisuf -> replaceExtension tId ('.':osuf)
             _          -> tId
 
     graphRev = Graph.transposeG graph
@@ -160,7 +190,7 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
 
     targetTable   = Array.listArray bounds targets
     targetIdTable = Array.listArray bounds (map targetId targets)
-    targets       = sortBy (comparing targetId) (depsToTargets deps)
+    targets       = sortBy (comparing targetId) (depsToTargets settings deps)
     topBound      = length targets - 1
     bounds        = (0, topBound)
 
@@ -174,12 +204,12 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
 
 -- | Given a list of (target, [dependency]), perform some checks and produce
 -- a list of build plan targets.
-depsToTargets :: [Dep] -> [Target]
-depsToTargets = map mkModuleTarget
+depsToTargets :: Settings -> [Dep] -> [Target]
+depsToTargets settings@Settings{ hisuf } = map mkModuleTarget
   where
     mkModuleTarget (Dep t intDeps extDeps)
       | badExtension = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
-                       ++ "target must end with " ++ show objExts
+                       ++ "target must end with " ++ show (('.':hisuf):defaultObjExts)
       | not depsOK   = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
                        ++ "dependencies are invalid: " ++ show intDeps
       | otherwise    = Target t tSrc intDeps extDeps
@@ -187,9 +217,9 @@ depsToTargets = map mkModuleTarget
         tSrc = fromMaybe (error "No source file in dependencies!")
                $ find ((`elem` sourceExts). takeExtension) intDeps
 
-        badExtension = takeExtension t `notElem` objExts
-        depsOK = length intDeps == 1
-                   || or [ takeExtension d `elem` interfaceExts | d <- intDeps ]
+        badExtension = not $ isValidObjectExt settings (takeExtension t)
+        depsOK = length intDeps == 1 -- TODO: Must this not be a sourceExts?
+                   || or [ isValidInterfaceExt settings (takeExtension d) | d <- intDeps ]
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
