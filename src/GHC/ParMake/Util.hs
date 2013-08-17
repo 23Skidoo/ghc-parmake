@@ -5,6 +5,7 @@ module GHC.ParMake.Util (runProcess, upToDateCheck
                         , defaultOutputHooks, OutputHooks(..)
                         , warn, notice, info, debug
                         , warn', notice', noticeRaw, info', debug'
+                        , Dep(..)
                         , Verbosity, intToVerbosity
                         , silent, normal, verbose, deafening)
        where
@@ -19,6 +20,15 @@ import System.IO ( hClose, hGetContents, hFlush, hPutStr, hPutStrLn
 import System.Process (runInteractiveProcess, waitForProcess)
 
 import GHC.ParMake.Common (andM)
+
+
+-- | A dependency as expressed by ghc -M output
+data Dep = Dep
+  { depTarget :: FilePath  -- ^ The target file
+  , internal :: [FilePath] -- ^ Dependencies in our build
+  , external :: [FilePath] -- ^ External dependencies as mentioned by ghc -M -include-pkg-deps
+                           --   (minus the internal ones)
+  } deriving (Eq, Ord, Show)
 
 -- Copied from Distribution.Verbosity.
 data Verbosity = Silent | Normal | Verbose | Deafening

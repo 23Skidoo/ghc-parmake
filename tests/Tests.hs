@@ -19,6 +19,7 @@ import Test.Framework.Providers.HUnit (testCase)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.BuildPlan (TargetId)
 import GHC.ParMake.Common (appendMap, uniq)
+import GHC.ParMake.Parse (depsListToDeps)
 
 ------------------------------------------------------------------------
 -- Input data generation for QuickCheck.
@@ -67,7 +68,7 @@ arbitraryName = (listOf . elements $ ['A'..'Z'] ++ ['a'..'z'] ++ ['0'..'9'])
 pMarkCompleted :: DepsList -> Bool
 pMarkCompleted (DepsList []) = True
 pMarkCompleted (DepsList  l) =
-  let plan = BuildPlan.new l
+  let plan = BuildPlan.new (depsListToDeps l)
       target = head . BuildPlan.ready $ plan
       plan' = BuildPlan.markReadyAsBuilding plan
       plan'' = BuildPlan.markCompleted plan' target
@@ -75,7 +76,7 @@ pMarkCompleted (DepsList  l) =
 
 pCompile :: DepsList -> Bool
 pCompile (DepsList []) = True
-pCompile (DepsList l) = go $ BuildPlan.new l
+pCompile (DepsList l) = go $ BuildPlan.new (depsListToDeps l)
   where
     go plan = if null rdy then check plan else go plan''
       where

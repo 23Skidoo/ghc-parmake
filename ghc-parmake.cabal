@@ -45,6 +45,7 @@ Library
                         GHC.ParMake.Common
                         GHC.ParMake.Engine
                         GHC.ParMake.Parse
+                        GHC.ParMake.Types
                         GHC.ParMake.Util
   Other-modules:        Distribution.Compat.ReadP
   Hs-source-dirs:       src

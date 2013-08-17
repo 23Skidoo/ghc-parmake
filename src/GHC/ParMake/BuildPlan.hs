@@ -6,28 +6,33 @@ module GHC.ParMake.BuildPlan
        (new, ready, building, completed, size
        , numCompleted, markCompleted
        , markReadyAsBuilding, numBuilding, hasBuilding
-       , BuildPlan, Target, TargetId, targetId, depends, source, object, objects)
+       , BuildPlan, Target, TargetId, targetId, allDepends, source, object, objects)
        where
 
 import qualified Data.Array as Array
 import qualified Data.Graph as Graph
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import Control.Exception (assert)
 import Data.Array ((!))
 import Data.Graph (Graph)
 import Data.Function (on)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
-import Data.List (find, groupBy, sortBy)
+
+import Data.List (find, sortBy)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (comparing)
 import System.FilePath (replaceExtension, takeExtension)
 
+import GHC.ParMake.Types (Dep(..))
+
 type TargetId = FilePath
+type ExternalDep = FilePath
 data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
               FilePath         -- ^ Source (e.g. 'Main.hs')
               [TargetId]       -- ^ Dependencies (e.g. 'A.hi', 'B.hi')
+              [ExternalDep]    -- ^ External dependencies (e.g. from the system: '/usr/local/ghc/ghc-7.6.3/lib/ghc-7.6.3/base-4.6.0.1/Prelude.hi'
+                               --                               or packages:     'cabal-dev/lib/mypackage-0.0.0.1/ghc-7.6.3/Module.hi')
             deriving (Show)
 
 instance Eq Target where
@@ -35,23 +40,31 @@ instance Eq Target where
 
 -- | Given a Target, return its ID.
 targetId :: Target -> TargetId
-targetId (Target tId _ _) = tId
+targetId (Target tId _ _ _) = tId
 
--- | Given a Target, return its dependencies.
+-- | Given a Target, return its dependencies (excluding external ones).
 depends :: Target -> [TargetId]
-depends (Target _ _ deps) = deps
+depends (Target _ _ deps _) = deps
+
+-- | Given a Target, return its external dependencies.
+externalDepends :: Target -> [TargetId]
+externalDepends (Target _ _ _ externalDeps) = externalDeps
+
+-- | Given a Target, return all its dependencies (home + external).
+allDepends :: Target -> [TargetId]
+allDepends t = depends t ++ externalDepends t
 
 -- | Given a Target, return the name of the source file from which it can be
 -- produced.
 source :: Target -> FilePath
-source (Target _ tSrc _) = tSrc
+source (Target _ tSrc _ _) = tSrc
 
 -- | Given a Target, return the name of the object file produced from it that
 -- should be fed to the linker.
 object :: Target -> Maybe FilePath
-object (Target tId _ _) = case takeExtension tId
-                          of ".o-boot" -> Nothing
-                             _         -> Just tId
+object (Target tId _ _ _) = case takeExtension tId
+                            of ".o-boot" -> Nothing
+                               _         -> Just tId
 
 -- | Given a BuildPlan, return the list of object files for all completed
 -- targets.
@@ -97,7 +110,7 @@ instance Show BuildPlan where
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
-new :: [(TargetId, TargetId)] -> BuildPlan
+new :: [Dep] -> BuildPlan
 new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
            numDepsMap readySet buildingSet
   where
@@ -124,11 +137,19 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
       where
         -- Each target has an additional dependency on a '.hs' file which is not
         -- in the graph.
-        countNumDeps = subtract 1 . length . depends
+        countNumDeps t = case length (depends t) of
+          n | n > 0 -> n - 1
+          _         -> error "BuildPlan.countNumDeps: BUG: A target should never have 0 dependencies"
 
+    -- TODO: It is possible to create a BuildPlan that is non-empty, but has
+    --       no buildable parts and thus is stuck (e.g. when all targets
+    --       have more than a single dependency).
+    --       We should raise some error when that happens.
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
       where hasSingleSourceDep (_,t) = case depends t of
+              -- TODO: This invariant should be enforced everywhere.
+              []  -> error "BuildPlan.hasSingleSourceDep: BUG: A target should never have 0 dependencies"
               [d] -> (takeExtension d) `elem` sourceExts
               _   -> False
     buildingSet = IntSet.empty
@@ -147,19 +168,22 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
         GT -> binarySearch (mid+1) b key
       where mid = (a + b) `div` 2
 
--- | Given a list of (target, dependency) pairs, produce a list of Targets.
-depsToTargets :: [(TargetId, TargetId)] -> [Target]
-depsToTargets = map (\l -> mkModuleTarget (fst . head $ l) (map snd l)) .
-                groupBy ((==) `on` fst)
+-- | Given a list of (target, [dependency]), perform some checks and produce
+-- a list of build plan targets.
+depsToTargets :: [Dep] -> [Target]
+depsToTargets = map mkModuleTarget
   where
-    mkModuleTarget tId tDeps = assert check (Target tId tSrc tDeps)
+    mkModuleTarget (Dep t intDeps extDeps)
+      | badExtension = error $ "ghc-parmake: target must end with " ++ show objExts
+      | not depsOK   = error $ "ghc-parmake: dependencies are not OK: " ++ show intDeps
+      | otherwise    = Target t tSrc intDeps extDeps
       where
         tSrc = fromMaybe (error "No source file in dependencies!")
-               $ find ((`elem` sourceExts). takeExtension) tDeps
+               $ find ((`elem` sourceExts). takeExtension) intDeps
 
-        check = (takeExtension tId `elem` objExts)
-                && (length tDeps == 1
-                    || or [ takeExtension d `elem` interfaceExts | d <- tDeps ])
+        badExtension = takeExtension t `notElem` objExts
+        depsOK = length intDeps == 1
+                   || or [ takeExtension d `elem` interfaceExts | d <- intDeps ]
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int
@@ -211,9 +235,10 @@ hasBuilding = not . IntSet.null . planBuilding
 
 -- | Mark a target as successfully built.
 markCompleted :: BuildPlan -> Target -> BuildPlan
-markCompleted plan target = assert check newPlan
+markCompleted plan target
+  | vertex `IntSet.notMember` planBuilding plan = error $ "ghc-parmake: BUG: vertex not in planBuilding"
+  | otherwise = newPlan
   where
-    check = vertex `IntSet.member` planBuilding plan
     vertex = fromMaybe
              (error $ "Target '" ++ targetId target ++ "' not in the graph!")
              (planVertexOf plan (targetId target))
@@ -223,9 +248,10 @@ markCompleted plan target = assert check newPlan
     deps = planGraphRev plan ! vertex
     (newReady, newNumDeps) = foldr updateNumDeps
                              (planReady plan, planNumDeps plan) deps
-    updateNumDeps curVertex (rdy, numDeps) = assert check' (ready', numDeps')
+    updateNumDeps curVertex (rdy, numDeps)
+      | oldDepsCount <= 0 = error $ "ghc-parmake: BUG: oldDepsCount is " ++ show oldDepsCount
+      | otherwise = (ready', numDeps')
       where
-        check' = oldDepsCount > 0
         oldDepsCount = numDeps IntMap.! curVertex
         newDepsCount = oldDepsCount - 1
         ready' = if newDepsCount == 0
