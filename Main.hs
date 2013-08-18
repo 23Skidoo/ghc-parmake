@@ -112,6 +112,31 @@ usage =
   "-V               - Print version information.\n" ++
   "\nOther options are passed to GHC unmodified.\n"
 
+-- TODO: To fully emulate GHC's behaviour, we must know whether the input module
+-- set contains a module Main.
+--
+-- Consider these two invocations:
+--
+-- $ ghc --make Module.hs Module0.hs
+-- [1 of 2] Compiling Module           ( Module.hs, t/Module.o )
+-- [2 of 2] Compiling Module0          ( Module0.hs, t/Module0.o )
+--
+-- $ ghc --make Module.hs Main.hs
+-- [1 of 2] Compiling Module           ( Module.hs, t/Module.o )
+-- [2 of 2] Compiling Main             ( Main.hs, t/Main.o )
+-- Linking Main ...
+--
+-- In the first case, the linking step is not performed since there is no module
+-- called 'Main'.
+--
+-- Additionally, the module 'Main' can have an arbitrary source file name, not
+-- necessary 'Main.hs'. This changes the name of the output executable:
+--
+-- $ ghc --make Module.hs MyProg.hs
+-- [1 of 2] Compiling Module           ( Module.hs, t/Module.o )
+-- [2 of 2] Compiling Main             ( MyProg.hs, t/Main.o )
+-- Linking MyProg ...
+--
 guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
 guessOutputFilename (Just n) _  = Just n
 guessOutputFilename Nothing [n] = Just (dropExtension n)
