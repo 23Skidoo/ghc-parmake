@@ -29,39 +29,37 @@ import GHC.ParMake.Types (Dep(..))
 
 type TargetId = FilePath
 type ExternalDep = FilePath
-data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
-              FilePath         -- ^ Source (e.g. 'Main.hs')
-              [TargetId]       -- ^ Dependencies (e.g. 'A.hi', 'B.hi')
-              [ExternalDep]
-              -- ^ External dependencies (e.g. from the system:
-              -- '/usr/local/ghc/ghc-7.6.3/lib/ghc-7.6.3/base-4.6.0.1/Prelude.hi'
-              -- or packages:
-              -- 'cabal-dev/lib/mypackage-0.0.0.1/ghc-7.6.3/Module.hi')
+data Target = Target
+  { targetId           :: TargetId   -- ^ Target (e.g. 'Main.o')
+  , targetSource       :: FilePath   -- ^ Source (e.g. 'Main.hs')
+  , targetDeps         :: [TargetId] -- ^ Dependencies (e.g. 'A.hi', 'B.hi')
+  , targetExternalDeps :: [ExternalDep]
+    -- ^ External dependencies (e.g. from the system:
+    -- '/usr/local/ghc/ghc-7.6.3/lib/ghc-7.6.3/base-4.6.0.1/Prelude.hi' or
+    -- packages: 'cabal-dev/lib/mypackage-0.0.0.1/ghc-7.6.3/Module.hi')
+  }
   deriving (Show)
 
 instance Eq Target where
   (==) = (==) `on` targetId
 
--- | Given a Target, return its ID.
-targetId :: Target -> TargetId
-targetId (Target tId _ _ _) = tId
 
 -- | Given a Target, return its dependencies (excluding external ones).
 depends :: Target -> [TargetId]
-depends (Target _ _ deps _) = deps
+depends = targetDeps
 
 -- | Given a Target, return its external dependencies.
 externalDepends :: Target -> [TargetId]
-externalDepends (Target _ _ _ externalDeps) = externalDeps
+externalDepends = targetExternalDeps
 
--- | Given a Target, return all its dependencies (home + external).
+-- | Given a Target, return all its dependencies (internal + external).
 allDepends :: Target -> [TargetId]
 allDepends t = depends t ++ externalDepends t
 
 -- | Given a Target, return the name of the source file from which it can be
 -- produced.
 source :: Target -> FilePath
-source (Target _ tSrc _ _) = tSrc
+source = targetSource
 
 -- | Given a Target, return the name of the object file produced from it that
 -- should be fed to the linker.
@@ -87,11 +85,11 @@ data BuildPlan = BuildPlan {
   planVertexOf  :: TargetId -> Maybe Graph.Vertex,
   planTargetOf  :: Graph.Vertex -> Target,
 
-  -- Target => number of dependencies that are not built yet.
+  -- | Target => number of dependencies that are not built yet.
   planNumDeps   :: IntMap Int,
-  -- Targets that are ready to be built.
+  -- | Targets that are ready to be built.
   planReady     :: IntSet,
-  -- Targets that are currently building.
+  -- | Targets that are currently building.
   planBuilding  :: IntSet
 }
 
