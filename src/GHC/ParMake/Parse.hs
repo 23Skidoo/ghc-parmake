@@ -69,20 +69,24 @@ getModuleDeps v ghcPath ghcArgs files =
         tmpFileExternal = tmpDir </> "depends.external.mk"
 
     let ghcArgsInternal = files ++ ("-M":"-dep-makefile":tmpFileInternal:ghcArgs)
-        ghcArgsExternal = files ++ ("-M":"-dep-makefile":tmpFileExternal:"-include-pkg-deps":ghcArgs)
+        ghcArgsExternal = files ++
+            ("-M":"-dep-makefile":tmpFileExternal:"-include-pkg-deps":ghcArgs)
 
-    -- Get all dependencies in this package
+    -- Get all internal dependencies in this package.
     let getInternalMakeDeps = do
           debug' v $ "Running compiler with -M to get internal module deps: "
                      ++ ghcPath ++ " " ++ show ghcArgsInternal
-          failOnError <$> runProcess defaultOutputHooks Nothing ghcPath ghcArgsInternal
+          failOnError <$> runProcess defaultOutputHooks Nothing
+                                     ghcPath ghcArgsInternal
           parseDepsFromFile tmpFileInternal
 
-    -- Pass -include-pkg-deps to also depend on external dependencies
+    -- Pass -include-pkg-deps to also find out the external dependencies.
     let getAllMakeDeps = do
-          debug' v $ "Running compiler with -M -include-pkg-deps to also get external module deps: "
-                     ++ ghcPath ++ " " ++ show ghcArgsExternal
-          failOnError <$> runProcess defaultOutputHooks Nothing ghcPath ghcArgsExternal
+          debug' v $ "Running compiler with '-M -include-pkg-deps' "
+            ++ "to get external module deps: "
+            ++ ghcPath ++ " " ++ show ghcArgsExternal
+          failOnError <$> runProcess defaultOutputHooks Nothing
+                                     ghcPath ghcArgsExternal
           parseDepsFromFile tmpFileExternal
 
     -- The two ghc -M are mainly CPU-bound. Run them in parallel.
@@ -94,11 +98,12 @@ getModuleDeps v ghcPath ghcArgs files =
                                  (groupByTarget allMakeDeps)
 
     -- External deps are (all - internal) ones.
-    return [ Dep target int (intExt `diff` int) | (target, (int, intExt)) <- Map.toList depsIntAll ]
+    return [ Dep target int (intExt `diff` int)
+           | (target, (int, intExt)) <- Map.toList depsIntAll ]
   where
-    failOnError ExitSuccess     = ()
-    failOnError (ExitFailure n) = error $ "ghc-parmake: ghc -M exited with status "
-                                          ++ show n
+    failOnError (ExitSuccess  ) = ()
+    failOnError (ExitFailure n) =
+      error $ "ghc-parmake: ghc -M exited with status " ++ show n
 
     parseDepsFromFile :: FilePath -> IO [(String, String)]
     parseDepsFromFile file = catMaybes . map parseLine . trimLines . lines

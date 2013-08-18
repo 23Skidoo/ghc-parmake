@@ -6,7 +6,8 @@ module GHC.ParMake.BuildPlan
        (new, ready, building, completed, size
        , numCompleted, markCompleted
        , markReadyAsBuilding, numBuilding, hasBuilding
-       , BuildPlan, Target, TargetId, targetId, allDepends, source, object, objects)
+       , BuildPlan, Target, TargetId
+       , targetId, allDepends, source, object, objects)
        where
 
 import qualified Data.Array as Array
@@ -31,9 +32,12 @@ type ExternalDep = FilePath
 data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
               FilePath         -- ^ Source (e.g. 'Main.hs')
               [TargetId]       -- ^ Dependencies (e.g. 'A.hi', 'B.hi')
-              [ExternalDep]    -- ^ External dependencies (e.g. from the system: '/usr/local/ghc/ghc-7.6.3/lib/ghc-7.6.3/base-4.6.0.1/Prelude.hi'
-                               --                               or packages:     'cabal-dev/lib/mypackage-0.0.0.1/ghc-7.6.3/Module.hi')
-            deriving (Show)
+              [ExternalDep]
+              -- ^ External dependencies (e.g. from the system:
+              -- '/usr/local/ghc/ghc-7.6.3/lib/ghc-7.6.3/base-4.6.0.1/Prelude.hi'
+              -- or packages:
+              -- 'cabal-dev/lib/mypackage-0.0.0.1/ghc-7.6.3/Module.hi')
+  deriving (Show)
 
 instance Eq Target where
   (==) = (==) `on` targetId
@@ -139,7 +143,8 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
         -- in the graph.
         countNumDeps t = case length (depends t) of
           n | n > 0 -> n - 1
-          _         -> error "BuildPlan.countNumDeps: BUG: A target should never have 0 dependencies"
+          _         -> error $ "GHC.ParMake.BuildPlan.countNumDeps: "
+                       ++ "BUG: A target should never have 0 dependencies"
 
     -- TODO: It is possible to create a BuildPlan that is non-empty, but has
     --       no buildable parts and thus is stuck (e.g. when all targets
@@ -149,7 +154,8 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
                . zip [0..] $ targets
       where hasSingleSourceDep (_,t) = case depends t of
               -- TODO: This invariant should be enforced everywhere.
-              []  -> error "BuildPlan.hasSingleSourceDep: BUG: A target should never have 0 dependencies"
+              []  -> error $ "GHC.ParMake.BuildPlan.hasSingleSourceDep: "
+                     ++ "BUG: A target should never have 0 dependencies"
               [d] -> (takeExtension d) `elem` sourceExts
               _   -> False
     buildingSet = IntSet.empty
@@ -174,8 +180,10 @@ depsToTargets :: [Dep] -> [Target]
 depsToTargets = map mkModuleTarget
   where
     mkModuleTarget (Dep t intDeps extDeps)
-      | badExtension = error $ "ghc-parmake: target must end with " ++ show objExts
-      | not depsOK   = error $ "ghc-parmake: dependencies are not OK: " ++ show intDeps
+      | badExtension = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
+                       ++ "target must end with " ++ show objExts
+      | not depsOK   = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
+                       ++ "dependencies are invalid: " ++ show intDeps
       | otherwise    = Target t tSrc intDeps extDeps
       where
         tSrc = fromMaybe (error "No source file in dependencies!")
@@ -236,7 +244,9 @@ hasBuilding = not . IntSet.null . planBuilding
 -- | Mark a target as successfully built.
 markCompleted :: BuildPlan -> Target -> BuildPlan
 markCompleted plan target
-  | vertex `IntSet.notMember` planBuilding plan = error $ "ghc-parmake: BUG: vertex not in planBuilding"
+  | vertex `IntSet.notMember` planBuilding plan =
+      error $ "GHC.ParMake.BuildPlan.markCompleted: "
+      ++ "BUG: vertex not in planBuilding"
   | otherwise = newPlan
   where
     vertex = fromMaybe
@@ -249,7 +259,8 @@ markCompleted plan target
     (newReady, newNumDeps) = foldr updateNumDeps
                              (planReady plan, planNumDeps plan) deps
     updateNumDeps curVertex (rdy, numDeps)
-      | oldDepsCount <= 0 = error $ "ghc-parmake: BUG: oldDepsCount is " ++ show oldDepsCount
+      | oldDepsCount <= 0 = error $ "GHC.ParMake.BuildPlan.updateNumDeps: "
+                            ++ "BUG: oldDepsCount is " ++ show oldDepsCount
       | otherwise = (ready', numDeps')
       where
         oldDepsCount = numDeps IntMap.! curVertex

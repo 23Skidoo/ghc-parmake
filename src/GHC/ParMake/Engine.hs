@@ -149,7 +149,8 @@ controlThread p mOutputFilename cch wch =
                   -- All modules are done.
                   then
                     -- Do we want to build an executable?
-                    -- If yes, queue this as the last thing to do before shutting down.
+                    -- If yes, queue this as the last thing to do before
+                    -- shutting down.
                     case mOutputFilename of
                       Nothing             -> return ExitSuccess
                       Just outputFilename -> do
@@ -161,7 +162,9 @@ controlThread p mOutputFilename cch wch =
                         case buildProgramMsg of
                           BuildFailed c  -> return c
                           BuildCompleted -> return ExitSuccess
-                          x              -> error $ "GHC.ParMake.Engine.controlThread: Unexpected BuildProgram response: " ++ show x
+                          x              ->
+                            error $ "GHC.ParMake.Engine.controlThread: "
+                            ++ "Unexpected BuildProgram response: " ++ show x
 
                   else go plan'' curNum'
 
