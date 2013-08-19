@@ -24,6 +24,7 @@ data Args = Args {
   printUsage     :: Bool,
   numJobs        :: Int,
   ghcPath        :: String,
+  extraDepends   :: [String],
   outputFilename :: Maybe String,
   osuf           :: String,
   hisuf          :: String
@@ -36,6 +37,7 @@ defaultArgs = Args {
   printUsage     = False,
   numJobs        = 1,
   ghcPath        = "ghc",
+  extraDepends   = [],
   outputFilename = Nothing,
   osuf           = "o",
   hisuf          = "hi"
@@ -59,6 +61,13 @@ parseArgs l = go l defaultArgs
     go (('-':'v':'v':n:[]):as) acc   = go as $
                                        acc { verbosity = parseVerbosity [n] }
     go ("-v":as) acc                 = go as $ acc { verbosity = verbose }
+    -- Add -optP-include -optPmyfile as extraDepends
+    go ("-optP-include":optPfile:as) acc@Args{ extraDepends = ds }
+                                     = case splitOffPrefix "-optP" optPfile of
+                                         Just path | path /= [] ->
+                                           go as $ acc { extraDepends = "dist/build/autogen/cabal_macros.h" : ds }
+                                         Just _ -> parseError "path given after -optP-include is empty!"
+                                         _      -> parseError "missing -optP after -optP-include"
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
     go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
     go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
@@ -67,6 +76,12 @@ parseArgs l = go l defaultArgs
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
                                        go (o:(tail p'):as) acc
     go (_:as) acc                    = go as acc
+
+
+splitOffPrefix :: (Eq a) => [a] -> [a] -> Maybe [a]
+splitOffPrefix p s = case splitAt (length p) s of
+  (p', r) | p' == p -> Just r
+  _                 -> Nothing
 
 
 getGhcArgs :: [String] -> ([String],[String])
@@ -228,7 +243,7 @@ main =
      debug' v ("Parsed dependencies:\n" ++ show deps)
      let settings = BuildPlan.Settings { BuildPlan.osuf  = osuf args
                                        , BuildPlan.hisuf = hisuf args }
-         plan = BuildPlan.new settings deps
+         plan = BuildPlan.new settings deps (extraDepends args)
      debug' v ("Produced a build plan:\n" ++ show plan)
 
      debug' v "Building..."

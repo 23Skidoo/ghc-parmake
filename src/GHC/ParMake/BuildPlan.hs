@@ -139,8 +139,8 @@ instance Show BuildPlan where
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
-new :: Settings -> [Dep] -> BuildPlan
-new settings@Settings{ osuf, hisuf } deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
+new :: Settings -> [Dep] -> [String] -> BuildPlan
+new settings@Settings{ osuf, hisuf } deps extraDeps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
            numDepsMap readySet buildingSet
   where
     targetIdToVertex   = binarySearch 0 topBound
@@ -190,7 +190,7 @@ new settings@Settings{ osuf, hisuf } deps = BuildPlan graph graphRev targetIdToV
 
     targetTable   = Array.listArray bounds targets
     targetIdTable = Array.listArray bounds (map targetId targets)
-    targets       = sortBy (comparing targetId) (depsToTargets settings deps)
+    targets       = sortBy (comparing targetId) (depsToTargets settings deps extraDeps)
     topBound      = length targets - 1
     bounds        = (0, topBound)
 
@@ -204,15 +204,15 @@ new settings@Settings{ osuf, hisuf } deps = BuildPlan graph graphRev targetIdToV
 
 -- | Given a list of (target, [dependency]), perform some checks and produce
 -- a list of build plan targets.
-depsToTargets :: Settings -> [Dep] -> [Target]
-depsToTargets settings@Settings{ hisuf } = map mkModuleTarget
+depsToTargets :: Settings -> [Dep] -> [String] -> [Target]
+depsToTargets settings@Settings{ hisuf } deps extraDeps = map mkModuleTarget deps
   where
     mkModuleTarget (Dep t intDeps extDeps)
       | badExtension = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
                        ++ "target must end with " ++ show (('.':hisuf):defaultObjExts)
       | not depsOK   = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
                        ++ "dependencies are invalid: " ++ show intDeps
-      | otherwise    = Target t tSrc intDeps extDeps
+      | otherwise    = Target t tSrc intDeps (extDeps ++ extraDeps)
       where
         tSrc = fromMaybe (error "No source file in dependencies!")
                $ find ((`elem` sourceExts). takeExtension) intDeps
