@@ -2,6 +2,7 @@
 -- this is taken from Distribution.Simple.Utils.
 
 module GHC.ParMake.Util (runProcess, upToDateCheck
+                        , UpToDateStatus(..)
                         , defaultOutputHooks, OutputHooks(..)
                         , warn, notice, info, debug
                         , warn', notice', noticeRaw, info', debug'
@@ -9,8 +10,9 @@ module GHC.ParMake.Util (runProcess, upToDateCheck
                         , silent, normal, verbose, deafening)
        where
 
+import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Monad (forM_, liftM, when)
+import Control.Monad (forM_, when)
 import qualified Control.Exception as Exception
 import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
@@ -18,7 +20,7 @@ import System.IO ( hClose, hGetContents, hFlush, hPutStr, hPutStrLn
                    , hSetBinaryMode, stderr, stdout)
 import System.Process (runInteractiveProcess, waitForProcess)
 
-import GHC.ParMake.Common (andM)
+import GHC.ParMake.Common (firstM)
 
 -- Copied from Distribution.Verbosity.
 data Verbosity = Silent | Normal | Verbose | Deafening
@@ -186,13 +188,23 @@ wrapLine width = wrap 0 []
         wrap _ []   [] = []
         wrap _ line [] = [reverse line]
 
+
+data UpToDateStatus = UpToDate | TargetDoesNotExist | NewerDependency FilePath
+                    deriving (Eq, Ord, Show)
+
+
 -- | Is this target up to date w.r.t. its dependencies?
-upToDateCheck :: FilePath -> [FilePath] -> IO Bool
+upToDateCheck :: FilePath -> [FilePath] -> IO UpToDateStatus
 upToDateCheck tId tDeps =
   do tExists <- doesFileExist tId
      if not tExists
-       then return False
+       then return TargetDoesNotExist
        else do tModTime <- getModificationTime tId
                -- TODO: Is this check correct? How GHC does this?
-               andM [ liftM (tModTime >=) (getModificationTime depId)
-                    | depId <- tDeps]
+
+               -- Find the first dependency that is newer than the target.
+               mNewerDep <- firstM tDeps (\d -> (> tModTime) <$> getModificationTime d)
+
+               return $ case mNewerDep of
+                 Just d  -> NewerDependency d
+                 Nothing -> UpToDate

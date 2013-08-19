@@ -1,6 +1,6 @@
 -- Misc. small useful pure functions.
 
-module GHC.ParMake.Common (andM, appendMap, maybeRead, pathToMaybe, uniq)
+module GHC.ParMake.Common (andM, appendMap, firstM, maybeRead, pathToMaybe, uniq)
        where
 
 import Data.Maybe (listToMaybe)
@@ -11,6 +11,13 @@ andM l = go l True
     go [] r     = return r
     go (a:as) r = if not r then return r
                   else a >>= (\ret -> go as (r && ret))
+
+firstM :: (Monad m) => [a] -> (a -> m Bool) -> m (Maybe a)
+firstM []     _ = return Nothing
+firstM (x:xs) f = do
+  c <- f x
+  if c then return (Just x)
+       else firstM xs f
 
 maybeRead :: Read a => String -> Maybe a
 maybeRead = fmap fst . listToMaybe . reads
