@@ -1,11 +1,13 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 -- Various utility functions for interfacing with the outside world. Most of
 -- this is taken from Distribution.Simple.Utils.
 
-module GHC.ParMake.Util (runProcess, upToDateCheck
+module GHC.ParMake.Util (runProcess, upToDateCheck, numberOfProcessors
                         , UpToDateStatus(..)
                         , defaultOutputHooks, OutputHooks(..)
                         , warn, notice, info, debug, fatal
                         , warn', notice', noticeRaw, info', debug'
+
                         , Verbosity, intToVerbosity
                         , silent, normal, verbose, deafening)
        where
@@ -14,10 +16,12 @@ import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Monad (forM_, when)
 import qualified Control.Exception as Exception
+import Foreign.C.Types ( CInt(..) )
 import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
 import System.IO ( hClose, hGetContents, hFlush, hPutStr, hPutStrLn
                    , hSetBinaryMode, stderr, stdout)
+import System.IO.Unsafe ( unsafePerformIO )
 import System.Process (runInteractiveProcess, waitForProcess)
 
 import GHC.ParMake.Common (firstM)
@@ -213,3 +217,10 @@ upToDateCheck tId tDeps =
                return $ case mNewerDep of
                  Just d  -> NewerDependency d
                  Nothing -> UpToDate
+
+foreign import ccall "getNumberOfProcessors" c_getNumberOfProcessors :: IO CInt
+
+-- The number of processors is not going to change during the duration of the
+-- program, so unsafePerformIO is safe here.
+numberOfProcessors :: Int
+numberOfProcessors = fromEnum $ unsafePerformIO c_getNumberOfProcessors
