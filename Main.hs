@@ -1,11 +1,11 @@
 module Main
        where
 
-import Control.Monad (liftM, when)
+import Control.Monad (liftM, unless, when)
 import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
-import System.Exit (exitFailure, exitSuccess, exitWith)
+import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.FilePath (dropExtension)
 import System.IO (hPutStrLn, stderr)
 
@@ -27,7 +27,8 @@ data Args = Args {
   extraDepends   :: [String],
   outputFilename :: Maybe String,
   osuf           :: String,
-  hisuf          :: String
+  hisuf          :: String,
+  skipFinalPass  :: Bool
   } deriving Show
 
 defaultArgs :: Args
@@ -40,7 +41,8 @@ defaultArgs = Args {
   extraDepends   = [],
   outputFilename = Nothing,
   osuf           = "o",
-  hisuf          = "hi"
+  hisuf          = "hi",
+  skipFinalPass  = False
   }
 
 parseArgs :: [String] -> Args
@@ -71,6 +73,7 @@ parseArgs l = go l defaultArgs
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
     go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
     go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
+    go ("--skip-final-pass":as) acc   = go as $ acc { skipFinalPass = True }
     go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
     go (a:as) acc
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
@@ -111,6 +114,7 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
     getGhcArgs' ("-j":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' ("-o":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' (('-':'v':'v':_:[]):xs) as fs = getGhcArgs' xs as fs
+    getGhcArgs' ("--skip-final-pass":xs) as fs = getGhcArgs' xs as fs
     getGhcArgs' ("--ghc-path":_:xs)     as fs = getGhcArgs' xs as fs
     getGhcArgs' (x:xs) as fs
       | "--ghc-path=" `isPrefixOf` x          = getGhcArgs' xs as fs
@@ -125,6 +129,8 @@ usage =
   "A parallel wrapper around 'ghc --make'.\n\n" ++
   "Options: \n" ++
   "-j N             - Run N jobs in parallel.\n" ++
+  "--skip-final-pass - Skip the final ghc --make pass.\n" ++
+  "                    Saves a few seconds, but TH changes might not be noticed.\n" ++
   "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
   "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
@@ -250,4 +256,9 @@ main =
      let ofn = guessOutputFilename (outputFilename args) files
      exitCode <- Engine.compile v plan (numJobs args)
                  (ghcPath args) ghcArgs files ofn
-     exitWith exitCode
+     when (exitCode /= ExitSuccess) $ exitWith exitCode
+
+     unless (skipFinalPass args) $ do
+       debug' v $ "Running final ghc --make pass to account for changes ghc -M cannot notice: "
+                  ++ ghcPath args ++ " " ++ unwords (ghcArgs ++ files)
+       passToGhc -- exits the program
