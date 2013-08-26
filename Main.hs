@@ -40,7 +40,8 @@ defaultArgs = Args {
 parseArgs :: [String] -> Args
 parseArgs l = go l defaultArgs
   where
-    parseNumJobs n = fromMaybe (error "The argument to '-j' must be an integer!")
+    parseError s = error $ "ghc-parmake: Main.parseArgs: " ++ s
+    parseNumJobs n = fromMaybe (parseError "The argument to '-j' must be an integer!")
                      (liftM abs $ maybeRead n)
     parseVerbosity n = fromMaybe verbose (maybeRead n >>= intToVerbosity)
 
