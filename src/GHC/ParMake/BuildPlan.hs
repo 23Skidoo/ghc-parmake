@@ -140,8 +140,9 @@ instance Show BuildPlan where
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
 new :: Settings -> [Dep] -> [FilePath] -> BuildPlan
-new settings@Settings{ osuf, hisuf } deps extraDeps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
-           numDepsMap readySet buildingSet
+new settings@Settings{ osuf, hisuf } deps extraDeps =
+  BuildPlan graph graphRev targetIdToVertex vertexToTargetId
+            numDepsMap readySet buildingSet
   where
     targetIdToVertex   = binarySearch 0 topBound
     vertexToTargetId v = targetTable ! v
@@ -188,7 +189,8 @@ new settings@Settings{ osuf, hisuf } deps extraDeps = BuildPlan graph graphRev t
 
     targetTable   = Array.listArray bounds targets
     targetIdTable = Array.listArray bounds (map targetId targets)
-    targets       = sortBy (comparing targetId) (depsToTargets settings deps extraDeps)
+    targets       = sortBy (comparing targetId)
+                    (depsToTargets settings deps extraDeps)
     topBound      = length targets - 1
     bounds        = (0, topBound)
 
@@ -207,7 +209,8 @@ depsToTargets settings@Settings{ osuf } deps extraDeps = map mkModuleTarget deps
   where
     mkModuleTarget (Dep t intDeps extDeps)
       | badExtension = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
-                       ++ "target must end with " ++ show (('.':osuf):defaultObjExts)
+                       ++ "target must end with "
+                       ++ show (('.':osuf):defaultObjExts)
       | not depsOK   = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
                        ++ "dependencies are invalid: " ++ show intDeps
       | otherwise    = Target t tSrc intDeps (extDeps ++ extraDeps)
@@ -217,7 +220,8 @@ depsToTargets settings@Settings{ osuf } deps extraDeps = map mkModuleTarget deps
 
         badExtension = not $ isValidObjectExt settings (takeExtension t)
         depsOK = length intDeps == 1 -- TODO: Must this not be a sourceExts?
-                   || or [ isValidInterfaceExt settings (takeExtension d) | d <- intDeps ]
+                   || or [ isValidInterfaceExt settings (takeExtension d)
+                         | d <- intDeps ]
 
 -- | Total number of targets in the BuildPlan.
 size :: BuildPlan -> Int

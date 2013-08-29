@@ -62,22 +62,26 @@ parseArgs l = go l defaultArgs
     go (('-':'v':'v':n:[]):as) acc   = go as $
                                        acc { verbosity = parseVerbosity [n] }
     go ("-v":as) acc                 = go as $ acc { verbosity = verbose }
-    -- Add -optP-include -optPmyfile as extraDepends
-    go ("-optP-include":optPfile:as) acc@Args{ extraDepends = ds }
-                                     = case splitOffPrefix "-optP" optPfile of
-                                         Just path | path /= [] ->
-                                           go as $ acc { extraDepends = path : ds }
-                                         Just _ -> fatal "path given after -optP-include is empty!"
-                                         _      -> fatal "missing -optP after -optP-include"
+    go ("-optP-include":as) acc      = handleOptPInclude as acc
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
     go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
     go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
-    go ("--skip-final-pass":as) acc   = go as $ acc { skipFinalPass = True }
+    go ("--skip-final-pass":as) acc  = go as $ acc { skipFinalPass = True }
     go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
     go (a:as) acc
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
                                        go (o:(tail p'):as) acc
     go (_:as) acc                    = go as acc
+
+
+    -- Add '-optP-include -optPmyfile' as extraDepends
+    handleOptPInclude [] _ = fatal "no path is given after -optP-include"
+    handleOptPInclude (optPfile:as) acc@Args { extraDepends = ds } =
+      case splitOffPrefix "-optP" optPfile of
+        Just path | not (null path) -> go as $ acc { extraDepends = path : ds }
+                  | otherwise       -> fatal $
+                                       "path given after -optP-include is empty"
+        _                           -> fatal "missing -optP after -optP-include"
 
 
 splitOffPrefix :: (Eq a) => [a] -> [a] -> Maybe [a]
@@ -129,7 +133,8 @@ usage =
   "Options: \n" ++
   "-j N             - Run N jobs in parallel.\n" ++
   "--skip-final-pass - Skip the final ghc --make pass.\n" ++
-  "                    Saves a few seconds, but TH changes might not be noticed.\n" ++
+  "                    Saves a few seconds, " ++
+                       "but TH changes might not be noticed.\n" ++
   "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
   "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
@@ -255,6 +260,7 @@ main =
      when (exitCode /= ExitSuccess) $ exitWith exitCode
 
      unless (skipFinalPass args) $ do
-       debug' v $ "Running final ghc --make pass to account for changes ghc -M cannot notice: "
-                  ++ ghcPath args ++ " " ++ unwords (ghcArgs ++ files)
+       debug' v $ "Running final ghc --make pass "
+         ++ "to account for changes ghc -M cannot notice: "
+         ++ ghcPath args ++ " " ++ unwords (ghcArgs ++ files)
        passToGhc -- exits the program

@@ -207,7 +207,8 @@ upToDateCheck tId tDeps =
                -- TODO: Is this check correct? How GHC does this?
 
                -- Find the first dependency that is newer than the target.
-               mNewerDep <- firstM tDeps (\d -> (> tModTime) <$> getModificationTime d)
+               mNewerDep <- firstM tDeps
+                            (\d -> (> tModTime) <$> getModificationTime d)
 
                return $ case mNewerDep of
                  Just d  -> NewerDependency d
