@@ -97,12 +97,14 @@ defaultObjExts       = [".o", ".o-boot"]
 isValidInterfaceExt :: Settings -> String -> Bool
 isValidInterfaceExt Settings{ hisuf } ext = case ext of
   '.':_ -> ext `elem` defaultInterfaceExts || ext == ('.':hisuf)
+           || ext == ('.':hisuf) ++ "-boot"
   _     -> False
 
 -- | `ext` must start with a dot.
 isValidObjectExt :: Settings -> String -> Bool
 isValidObjectExt Settings{ osuf } ext = case ext of
   '.':_ -> ext `elem` defaultObjExts || ext == ('.':osuf)
+           || ext == ('.':osuf) ++ "-boot"
   _     -> False
 
 -- | A graph of all dependencies between targets.
