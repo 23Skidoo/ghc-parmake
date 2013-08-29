@@ -11,7 +11,7 @@ import System.FilePath (dropExtension)
 import GHC.ParMake.BuildPlan (BuildPlan, Target)
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import GHC.ParMake.Util (defaultOutputHooks, OutputHooks(..)
-                         , runProcess, upToDateCheck
+                         , runProcess, upToDateCheck, UpToDateStatus(..)
                          , Verbosity, debug, noticeRaw)
 
 -- The program consists of several threads which communicate via Chans. There
@@ -94,15 +94,18 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
          let tSrc  = BuildPlan.source target
          let tDeps = BuildPlan.allDepends target
          let tName = slashesToDots . dropExtension $ tSrc
-         let msg = "[" ++ show curNum ++ " of "++ totNum ++ "] Compiling "
-                   ++ tName
-                   ++ replicate (16 - length tName) ' '
-                   ++ " ( " ++ tSrc ++ ", " ++ tId ++ " )\n"
-         isUpToDate <- upToDateCheck tId tDeps
-         if isUpToDate
-           then return ExitSuccess
-           else do noticeRaw outHooks verbosity msg
-                   runGHC ("-c":tSrc:ghcArgs)
+         let msg reason = "[" ++ show curNum ++ " of "++ totNum ++ "] Compiling "
+                          ++ tName
+                          ++ replicate (16 - length tName) ' '
+                          ++ " ( " ++ tSrc ++ ", " ++ tId ++ " ) [" ++ reason ++ "]\n"
+             compileBecause reason = do noticeRaw outHooks verbosity (msg reason)
+                                        runGHC ("-c":tSrc:ghcArgs)
+         upToDateStatus <- upToDateCheck tId tDeps
+         case upToDateStatus of
+           UpToDate             -> return ExitSuccess
+           TargetDoesNotExist   -> compileBecause "new"
+           NewerDependency file -> compileBecause (file ++ " changed")
+             where
 
     buildProgram :: FilePath -> IO ExitCode
     buildProgram outputFilename =

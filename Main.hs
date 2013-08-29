@@ -1,11 +1,11 @@
 module Main
        where
 
-import Control.Monad (liftM, when)
+import Control.Monad (liftM, unless, when)
 import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
-import System.Exit (exitFailure, exitSuccess, exitWith)
+import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.FilePath (dropExtension)
 import System.IO (hPutStrLn, stderr)
 
@@ -24,7 +24,11 @@ data Args = Args {
   printUsage     :: Bool,
   numJobs        :: Int,
   ghcPath        :: String,
-  outputFilename :: Maybe String
+  extraDepends   :: [String],
+  outputFilename :: Maybe String,
+  osuf           :: String,
+  hisuf          :: String,
+  skipFinalPass  :: Bool
   } deriving Show
 
 defaultArgs :: Args
@@ -34,13 +38,18 @@ defaultArgs = Args {
   printUsage     = False,
   numJobs        = 1,
   ghcPath        = "ghc",
-  outputFilename = Nothing
+  extraDepends   = [],
+  outputFilename = Nothing,
+  osuf           = "o",
+  hisuf          = "hi",
+  skipFinalPass  = False
   }
 
 parseArgs :: [String] -> Args
 parseArgs l = go l defaultArgs
   where
-    parseNumJobs n = fromMaybe (error "The argument to '-j' must be an integer!")
+    parseError s = error $ "ghc-parmake: Main.parseArgs: " ++ s
+    parseNumJobs n = fromMaybe (parseError "The argument to '-j' must be an integer!")
                      (liftM abs $ maybeRead n)
     parseVerbosity n = fromMaybe verbose (maybeRead n >>= intToVerbosity)
 
@@ -54,12 +63,28 @@ parseArgs l = go l defaultArgs
     go (('-':'v':'v':n:[]):as) acc   = go as $
                                        acc { verbosity = parseVerbosity [n] }
     go ("-v":as) acc                 = go as $ acc { verbosity = verbose }
+    -- Add -optP-include -optPmyfile as extraDepends
+    go ("-optP-include":optPfile:as) acc@Args{ extraDepends = ds }
+                                     = case splitOffPrefix "-optP" optPfile of
+                                         Just path | path /= [] ->
+                                           go as $ acc { extraDepends = "dist/build/autogen/cabal_macros.h" : ds }
+                                         Just _ -> parseError "path given after -optP-include is empty!"
+                                         _      -> parseError "missing -optP after -optP-include"
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
+    go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
+    go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
+    go ("--skip-final-pass":as) acc   = go as $ acc { skipFinalPass = True }
     go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
     go (a:as) acc
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
                                        go (o:(tail p'):as) acc
     go (_:as) acc                    = go as acc
+
+
+splitOffPrefix :: (Eq a) => [a] -> [a] -> Maybe [a]
+splitOffPrefix p s = case splitAt (length p) s of
+  (p', r) | p' == p -> Just r
+  _                 -> Nothing
 
 
 getGhcArgs :: [String] -> ([String],[String])
@@ -89,6 +114,7 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
     getGhcArgs' ("-j":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' ("-o":_:xs) as fs             = getGhcArgs' xs as fs
     getGhcArgs' (('-':'v':'v':_:[]):xs) as fs = getGhcArgs' xs as fs
+    getGhcArgs' ("--skip-final-pass":xs) as fs = getGhcArgs' xs as fs
     getGhcArgs' ("--ghc-path":_:xs)     as fs = getGhcArgs' xs as fs
     getGhcArgs' (x:xs) as fs
       | "--ghc-path=" `isPrefixOf` x          = getGhcArgs' xs as fs
@@ -103,6 +129,8 @@ usage =
   "A parallel wrapper around 'ghc --make'.\n\n" ++
   "Options: \n" ++
   "-j N             - Run N jobs in parallel.\n" ++
+  "--skip-final-pass - Skip the final ghc --make pass.\n" ++
+  "                    Saves a few seconds, but TH changes might not be noticed.\n" ++
   "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
   "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
@@ -219,11 +247,18 @@ main =
       exitFailure
 
      debug' v ("Parsed dependencies:\n" ++ show deps)
-     let plan = BuildPlan.new deps
+     let settings = BuildPlan.Settings { BuildPlan.osuf  = osuf args
+                                       , BuildPlan.hisuf = hisuf args }
+         plan = BuildPlan.new settings deps (extraDepends args)
      debug' v ("Produced a build plan:\n" ++ show plan)
 
      debug' v "Building..."
      let ofn = guessOutputFilename (outputFilename args) files
      exitCode <- Engine.compile v plan (numJobs args)
                  (ghcPath args) ghcArgs files ofn
-     exitWith exitCode
+     when (exitCode /= ExitSuccess) $ exitWith exitCode
+
+     unless (skipFinalPass args) $ do
+       debug' v $ "Running final ghc --make pass to account for changes ghc -M cannot notice: "
+                  ++ ghcPath args ++ " " ++ unwords (ghcArgs ++ files)
+       passToGhc -- exits the program
