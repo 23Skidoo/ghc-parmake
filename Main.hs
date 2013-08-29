@@ -67,7 +67,7 @@ parseArgs l = go l defaultArgs
     go ("-optP-include":optPfile:as) acc@Args{ extraDepends = ds }
                                      = case splitOffPrefix "-optP" optPfile of
                                          Just path | path /= [] ->
-                                           go as $ acc { extraDepends = "dist/build/autogen/cabal_macros.h" : ds }
+                                           go as $ acc { extraDepends = path : ds }
                                          Just _ -> parseError "path given after -optP-include is empty!"
                                          _      -> parseError "missing -optP after -optP-include"
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
