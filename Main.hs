@@ -48,8 +48,7 @@ defaultArgs = Args {
 parseArgs :: [String] -> Args
 parseArgs l = go l defaultArgs
   where
-    parseError s = error $ "ghc-parmake: Main.parseArgs: " ++ s
-    parseNumJobs n = fromMaybe (parseError "The argument to '-j' must be an integer!")
+    parseNumJobs n = fromMaybe (fatal "The argument to '-j' must be an integer!")
                      (liftM abs $ maybeRead n)
     parseVerbosity n = fromMaybe verbose (maybeRead n >>= intToVerbosity)
 
@@ -68,8 +67,8 @@ parseArgs l = go l defaultArgs
                                      = case splitOffPrefix "-optP" optPfile of
                                          Just path | path /= [] ->
                                            go as $ acc { extraDepends = path : ds }
-                                         Just _ -> parseError "path given after -optP-include is empty!"
-                                         _      -> parseError "missing -optP after -optP-include"
+                                         Just _ -> fatal "path given after -optP-include is empty!"
+                                         _      -> fatal "missing -optP after -optP-include"
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
     go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
     go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
@@ -169,9 +168,6 @@ guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
 guessOutputFilename (Just n) _  = Just n
 guessOutputFilename Nothing [n] = Just (dropExtension n)
 guessOutputFilename Nothing _   = Nothing
-
-fatal :: String -> IO ()
-fatal msg = hPutStrLn stderr $ "ghc-parmake: " ++ msg
 
 -- | All flags conflicting with `ghc -M`.
 -- Obtained from the man page (listed in the same order as they appear there)

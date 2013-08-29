@@ -4,7 +4,7 @@
 module GHC.ParMake.Util (runProcess, upToDateCheck
                         , UpToDateStatus(..)
                         , defaultOutputHooks, OutputHooks(..)
-                        , warn, notice, info, debug
+                        , warn, notice, info, debug, fatal
                         , warn', notice', noticeRaw, info', debug'
                         , Verbosity, intToVerbosity
                         , silent, normal, verbose, deafening)
@@ -49,6 +49,10 @@ intToVerbosity 1 = Just Normal
 intToVerbosity 2 = Just Verbose
 intToVerbosity 3 = Just Deafening
 intToVerbosity _ = Nothing
+
+-- | Fatal error.
+fatal :: String -> a
+fatal s = error $ "ghc-parmake: " ++ s
 
 -- | Non fatal conditions that may be indicative of an error or problem.
 --

@@ -19,7 +19,8 @@ import System.IO.Temp (withSystemTempDirectory)
 
 import Distribution.Compat.ReadP
 import GHC.ParMake.Types (Dep(..))
-import GHC.ParMake.Util (Verbosity, debug', defaultOutputHooks, runProcess)
+import GHC.ParMake.Util (Verbosity, debug', fatal,
+                         defaultOutputHooks, runProcess)
 
 
 -- TODO This random choice of characters is *insane*, this will NOT WORK when
@@ -103,7 +104,7 @@ getModuleDeps v ghcPath ghcArgs files =
   where
     failOnError (ExitSuccess  ) = ()
     failOnError (ExitFailure n) =
-      error $ "ghc-parmake: ghc -M exited with status " ++ show n
+      fatal $ "ghc -M exited with status " ++ show n
 
     parseDepsFromFile :: FilePath -> IO [(String, String)]
     parseDepsFromFile file = catMaybes . map parseLine . trimLines . lines
