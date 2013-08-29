@@ -1,6 +1,7 @@
 module Main
        where
 
+import Control.Monad
 import Control.Exception
 import Data.Char
 import Data.List
@@ -105,22 +106,31 @@ mkTestCase dirName numJobs =
      assertBool ("Directory '" ++ testDir ++ "' doesn't exist!") t1
      assertBool ("Executable '" ++ makeProgram ++ "' doesn't exist!") t2
 
-     -- Build the program.
-     curDir <- getCurrentDirectory
-     createDirectory oDir
-     exitCode <- getExitCode (curDir </> makeProgram)
-                 [ "Main.hs", "-package", "base", "-j", show numJobs
-                 , "-odir", oDirName, "-hidir", oDirName] testDir
-     assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
-     removeDirectoryRecursive oDir
+     -- Try building the program with different options.
+     buildProgram []
+     buildProgram ["-hisuf", "hi_p", "-osuf", "o_p"]
 
      -- Check output.
      testProgramOutput <- readProcess testProgram [] ""
      referenceOutput <- readFile testFile
      assertEqual "Program output is wrong!" referenceOutput testProgramOutput
-     removeFile testProgram
+       `finally` removeFile testProgram
 
   where
+    buildProgram extraOpts = do
+      curDir <- getCurrentDirectory
+      recreateDirectory oDir
+      let args = [ "Main.hs", "-package", "base", "-j", show numJobs
+                 , "-odir", oDirName, "-hidir", oDirName ] ++ extraOpts
+      exitCode <- getExitCode (curDir </> makeProgram) args testDir
+      assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
+        `finally` removeDirectoryRecursive oDir
+
+    recreateDirectory dir = do
+      dirExists <- doesDirectoryExist dir
+      when dirExists $ removeDirectoryRecursive dir
+      createDirectory dir
+
     testDir     = "tests" </> "data" </> dirName
     oDirName    = "tmp"
     oDir        = testDir </> oDirName
