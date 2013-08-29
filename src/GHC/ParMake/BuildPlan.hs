@@ -139,7 +139,7 @@ instance Show BuildPlan where
 
 -- | Create a new BuildPlan from a list of (target, dependency) pairs. This is
 -- mostly a copy of Distribution.Client.PackageIndex.dependencyGraph.
-new :: Settings -> [Dep] -> [String] -> BuildPlan
+new :: Settings -> [Dep] -> [FilePath] -> BuildPlan
 new settings@Settings{ osuf, hisuf } deps extraDeps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
            numDepsMap readySet buildingSet
   where
