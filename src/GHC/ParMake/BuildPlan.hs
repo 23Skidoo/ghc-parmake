@@ -155,12 +155,10 @@ new settings@Settings{ osuf, hisuf } deps extraDeps = BuildPlan graph graphRev t
         -- We don't keep '.hi' targets in the graph, only in the depends list.
         interfaceToObj tId =
           case takeExtension tId of
-            -- TODO: Should we remove this in favour of osuf/hisuf?
-            --       If yes, how do we deal with -boot files?
-            ".hi"      -> replaceExtension tId ".o"
-            ".hi-boot" -> replaceExtension tId ".o-boot"
             ext | ext == '.':hisuf -> replaceExtension tId ('.':osuf)
-            _          -> tId
+                | ext == '.':hisuf ++ "-boot" -> replaceExtension tId
+                                                 ('.':osuf ++ "-boot")
+            _ -> tId
 
     graphRev = Graph.transposeG graph
 
