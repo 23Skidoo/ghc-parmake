@@ -203,11 +203,11 @@ new settings@Settings{ osuf, hisuf } deps extraDeps = BuildPlan graph graphRev t
 -- | Given a list of (target, [dependency]), perform some checks and produce
 -- a list of build plan targets.
 depsToTargets :: Settings -> [Dep] -> [String] -> [Target]
-depsToTargets settings@Settings{ hisuf } deps extraDeps = map mkModuleTarget deps
+depsToTargets settings@Settings{ osuf } deps extraDeps = map mkModuleTarget deps
   where
     mkModuleTarget (Dep t intDeps extDeps)
       | badExtension = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
-                       ++ "target must end with " ++ show (('.':hisuf):defaultObjExts)
+                       ++ "target must end with " ++ show (('.':osuf):defaultObjExts)
       | not depsOK   = error $ "GHC.ParMake.BuildPlan.depsToTargets: "
                        ++ "dependencies are invalid: " ++ show intDeps
       | otherwise    = Target t tSrc intDeps (extDeps ++ extraDeps)
