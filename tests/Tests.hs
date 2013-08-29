@@ -68,7 +68,7 @@ arbitraryName = (listOf . elements $ ['A'..'Z'] ++ ['a'..'z'] ++ ['0'..'9'])
 pMarkCompleted :: DepsList -> Bool
 pMarkCompleted (DepsList []) = True
 pMarkCompleted (DepsList  l) =
-  let plan = BuildPlan.new defaultSettings (depsListToDeps l)
+  let plan = BuildPlan.new defaultSettings (depsListToDeps l) []
       target = head . BuildPlan.ready $ plan
       plan' = BuildPlan.markReadyAsBuilding plan
       plan'' = BuildPlan.markCompleted plan' target
@@ -76,7 +76,7 @@ pMarkCompleted (DepsList  l) =
 
 pCompile :: DepsList -> Bool
 pCompile (DepsList []) = True
-pCompile (DepsList l) = go $ BuildPlan.new defaultSettings (depsListToDeps l)
+pCompile (DepsList l) = go $ BuildPlan.new defaultSettings (depsListToDeps l) []
   where
     go plan = if null rdy then check plan else go plan''
       where
