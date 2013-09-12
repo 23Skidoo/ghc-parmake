@@ -22,7 +22,7 @@ To set the number of concurrent jobs, use the `-j` option.
     -j N             - Run N jobs in parallel.
     --ghc-path=PATH  - Set the path to the ghc executable.
 
-    -vv[N]           - Set verbosity to N (only for ghc-parmake). 
+    -vv[N]           - Set verbosity to N (only for ghc-parmake).
                        N is 0-3, default 1.
     -v[N]            - Set verbosity to N (both for GHC and ghc-parmake itself).
     --help           - Print usage information.
@@ -33,5 +33,4 @@ Other options are passed to GHC unmodified.
 ## Known limitations
 
 * Build fails when `-odir` != `-hidir`.
-* `-hisuf`/`-osuf` are not supported (needed when building libs for profiling).
 * Tested only on Linux.
