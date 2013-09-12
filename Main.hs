@@ -6,7 +6,7 @@ import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, stderr, hSetBuffering, BufferMode(LineBuffering))
 
 import GHC.ParMake.Common (maybeRead)
 import GHC.ParMake.Util
@@ -221,7 +221,10 @@ flagsConflictingWithM =
 
 main :: IO ()
 main =
-  do argv <- getArgs
+  do -- Set stderr to line buffering to prevent interleaved GHC errors
+     hSetBuffering stderr LineBuffering
+
+     argv <- getArgs
      let args = parseArgs argv
      let (parmakeGhcArgs, files, nonParmakeArgs) = getGhcArgs argv
      let v = verbosity $ args
