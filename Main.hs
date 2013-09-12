@@ -1,7 +1,7 @@
 module Main
        where
 
-import Control.Monad (liftM, unless, when)
+import Control.Monad (liftM, when)
 import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
@@ -26,8 +26,7 @@ data Args = Args {
   extraDepends   :: [String],
   outputFilename :: Maybe String,
   osuf           :: String,
-  hisuf          :: String,
-  skipFinalPass  :: Bool
+  hisuf          :: String
   } deriving Show
 
 defaultArgs :: Args
@@ -40,8 +39,7 @@ defaultArgs = Args {
   extraDepends   = [],
   outputFilename = Nothing,
   osuf           = "o",
-  hisuf          = "hi",
-  skipFinalPass  = False
+  hisuf          = "hi"
   }
 
 parseArgs :: [String] -> Args
@@ -65,7 +63,6 @@ parseArgs l = go l defaultArgs
     go ("-o":n:as) acc               = go as $ acc { outputFilename = Just n }
     go ("-osuf":suf:as) acc          = go as $ acc { osuf = suf }
     go ("-hisuf":suf:as) acc         = go as $ acc { hisuf = suf }
-    go ("--skip-final-pass":as) acc  = go as $ acc { skipFinalPass = True }
     go ("--ghc-path":p:as) acc       = go as $ acc { ghcPath = p }
     go (a:as) acc
       | "--ghc-path=" `isPrefixOf` a = let (o,p') = break (== '=') a in
@@ -131,7 +128,6 @@ getGhcArgs argv = let nonParmakeArgs = rmArgs argv
     -- Options not passed to GHC: -o, -j, -vv, --ghc-path, --make.
     rmArgs ("-j":_:xs)                  = rmArgs xs
     rmArgs (('-':'v':'v':_:[]):xs)      = rmArgs xs
-    rmArgs ("--skip-final-pass":xs)     = rmArgs xs
     rmArgs ("--ghc-path":_:xs)          = rmArgs xs
     rmArgs (x:xs)
       | "--ghc-path=" `isPrefixOf` x    = rmArgs xs
@@ -144,9 +140,6 @@ usage =
   "A parallel wrapper around 'ghc --make'.\n\n" ++
   "Options: \n" ++
   "-j N             - Run N jobs in parallel.\n" ++
-  "--skip-final-pass - Skip the final ghc --make pass.\n" ++
-  "                    Saves a few seconds, " ++
-                       "but TH changes might not be noticed.\n" ++
   "--ghc-path=PATH  - Set the path to the ghc executable.\n" ++
   "-vv[N]           - Set verbosity to N (only for ghc-parmake). " ++
   "N is 0-3, default 1.\n" ++
@@ -269,8 +262,6 @@ main =
                  (ghcPath args) parmakeGhcArgs files (outputFilename args)
      when (exitCode /= ExitSuccess) $ exitWith exitCode
 
-     unless (skipFinalPass args) $ do
-       debug' v $ "Running final ghc --make pass "
-         ++ "to account for changes ghc -M cannot notice: "
-         ++ ghcPath args ++ " " ++ unwords nonParmakeArgs
-       passToGhc -- exits the program
+     debug' v $ "Running final 'ghc --make' pass: "
+       ++ ghcPath args ++ " " ++ unwords nonParmakeArgs
+     passToGhc
