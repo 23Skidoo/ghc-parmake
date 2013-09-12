@@ -97,7 +97,9 @@ getExitCode :: FilePath -> [String] -> FilePath -> IO ExitCode
 getExitCode program args workingDir =
   do bracket (runInteractiveProcess program args (Just workingDir) Nothing)
        (\(inh, outh, errh, _) -> mapM_ hClose [inh, outh, errh])
-       (\(_,_,_,pid) -> waitForProcess pid)
+       (\(_,_,errh,pid) -> do exitCode <- waitForProcess pid
+                              hGetContents errh >>= putStrLn
+                              return exitCode)
 
 mkTestCase :: FilePath -> Int -> Assertion
 mkTestCase dirName numJobs =
