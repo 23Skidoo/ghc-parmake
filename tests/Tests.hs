@@ -93,6 +93,15 @@ pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
 ------------------------------------------------------------------------
 -- Unit tests.
 
+makeProgram :: String
+makeProgram = "dist" </> "build" </> "ghc-parmake" </> "ghc-parmake"
+
+recreateDirectory :: FilePath -> IO ()
+recreateDirectory dir =
+  do dirExists <- doesDirectoryExist dir
+     when dirExists $ removeDirectoryRecursive dir
+     createDirectory dir
+
 getExitCode :: FilePath -> [String] -> FilePath -> IO ExitCode
 getExitCode program args workingDir =
   do bracket (runInteractiveProcess program args (Just workingDir) Nothing)
@@ -128,15 +137,9 @@ mkTestCase dirName numJobs =
       assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
         `finally` removeDirectoryRecursive oDir
 
-    recreateDirectory dir = do
-      dirExists <- doesDirectoryExist dir
-      when dirExists $ removeDirectoryRecursive dir
-      createDirectory dir
-
     testDir     = "tests" </> "data" </> dirName
     oDirName    = "tmp"
     oDir        = testDir </> oDirName
-    makeProgram = "dist/build/ghc-parmake/ghc-parmake"
     testProgram = testDir </> "Main"
     testFile    = testDir </> "OUTPUT"
 
