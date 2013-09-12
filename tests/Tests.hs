@@ -149,9 +149,11 @@ testSuperfluousExe :: Assertion
 testSuperfluousExe =
   do curDir <- getCurrentDirectory
      let testDir     = "tests" </> "data" </> "output-target"
-         oDir        = testDir </> "tmp"
-         testProgram = "tmp" </> "myprogram"
-         args        =  [ "--make", "Prog.hs", "-o", testProgram ]
+         oDirName    = "tmp"
+         oDir        = testDir </> oDirName
+         testProgram = oDirName </> "myprogram"
+         args        =  [ "--make", "Prog.hs", "-o", testProgram
+                        , "-odir", oDirName, "-hidir", oDirName]
          badExe      = testDir </> "Prog"
 
      recreateDirectory oDir
