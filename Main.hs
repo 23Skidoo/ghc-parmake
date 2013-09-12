@@ -6,7 +6,6 @@ import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
-import System.FilePath (dropExtension)
 import System.IO (hPutStrLn, stderr)
 
 import GHC.ParMake.Common (maybeRead)
@@ -182,10 +181,7 @@ usage =
 -- [2 of 2] Compiling Main             ( MyProg.hs, t/Main.o )
 -- Linking MyProg ...
 --
-guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
-guessOutputFilename (Just n) _  = Just n
-guessOutputFilename Nothing [n] = Just (dropExtension n)
-guessOutputFilename Nothing _   = Nothing
+-- We currently solve this problem by the final real GHC pass.
 
 -- | All flags conflicting with `ghc -M`.
 -- Obtained from the man page (listed in the same order as they appear there)
@@ -266,9 +262,8 @@ main =
      debug' v ("Produced a build plan:\n" ++ show plan)
 
      debug' v "Building..."
-     let ofn = guessOutputFilename (outputFilename args) files
      exitCode <- Engine.compile v plan (numJobs args)
-                 (ghcPath args) parmakeGhcArgs files ofn
+                 (ghcPath args) parmakeGhcArgs files (outputFilename args)
      when (exitCode /= ExitSuccess) $ exitWith exitCode
 
      unless (skipFinalPass args) $ do
