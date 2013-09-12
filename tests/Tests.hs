@@ -143,6 +143,34 @@ mkTestCase dirName numJobs =
     testProgram = testDir </> "Main"
     testFile    = testDir </> "OUTPUT"
 
+-- | Checks that parmake does not create another executable next to
+-- the source file if the -o option is given.
+testSuperfluousExe :: Assertion
+testSuperfluousExe =
+  do curDir <- getCurrentDirectory
+     let testDir     = "tests" </> "data" </> "output-target"
+         oDir        = testDir </> "tmp"
+         testProgram = "tmp" </> "myprogram"
+         args        =  [ "--make", "Prog.hs", "-o", testProgram ]
+         badExe      = testDir </> "Prog"
+
+     recreateDirectory oDir
+
+     -- Remove potentially existing old bad executable
+     progExists <- doesFileExist badExe
+     when progExists $ removeFile badExe
+
+     exitCode <- getExitCode (curDir </> makeProgram) args testDir
+
+     (do assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
+         progExist <- doesFileExist (testDir </> testProgram)
+         assertBool "target specified via -o was not created" progExist
+         badExist <- doesFileExist badExe
+         assertBool "executable was created next to source file (should not)"
+                    (not badExist)
+       ) `finally` removeDirectoryRecursive oDir
+
+
 ------------------------------------------------------------------------
 -- Test harness
 
@@ -160,5 +188,8 @@ tests =
       [ testCase dirName (mkTestCase dirName 2)
       | dirName <- [ "executable" , "executable-lhs"
                    , "executable-mutrec", "executable-lhs-mutrec" ]
+      ]
+    , testGroup "custom tests"
+      [ testCase "-o does not create superfluous exe" testSuperfluousExe
       ]
     ]
