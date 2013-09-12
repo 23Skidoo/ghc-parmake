@@ -93,11 +93,22 @@ pAppendMap l1 l2 = appendMap id l1 l2 == l1 ++ l2
 ------------------------------------------------------------------------
 -- Unit tests.
 
+makeProgram :: String
+makeProgram = "dist" </> "build" </> "ghc-parmake" </> "ghc-parmake"
+
+recreateDirectory :: FilePath -> IO ()
+recreateDirectory dir =
+  do dirExists <- doesDirectoryExist dir
+     when dirExists $ removeDirectoryRecursive dir
+     createDirectory dir
+
 getExitCode :: FilePath -> [String] -> FilePath -> IO ExitCode
 getExitCode program args workingDir =
   do bracket (runInteractiveProcess program args (Just workingDir) Nothing)
        (\(inh, outh, errh, _) -> mapM_ hClose [inh, outh, errh])
-       (\(_,_,_,pid) -> waitForProcess pid)
+       (\(_,_,errh,pid) -> do exitCode <- waitForProcess pid
+                              hGetContents errh >>= putStrLn
+                              return exitCode)
 
 mkTestCase :: FilePath -> Int -> Assertion
 mkTestCase dirName numJobs =
@@ -126,17 +137,39 @@ mkTestCase dirName numJobs =
       assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
         `finally` removeDirectoryRecursive oDir
 
-    recreateDirectory dir = do
-      dirExists <- doesDirectoryExist dir
-      when dirExists $ removeDirectoryRecursive dir
-      createDirectory dir
-
     testDir     = "tests" </> "data" </> dirName
     oDirName    = "tmp"
     oDir        = testDir </> oDirName
-    makeProgram = "dist/build/ghc-parmake/ghc-parmake"
     testProgram = testDir </> "Main"
     testFile    = testDir </> "OUTPUT"
+
+-- | Checks that parmake does not create another executable next to
+-- the source file if the -o option is given.
+testSuperfluousExe :: Assertion
+testSuperfluousExe =
+  do curDir <- getCurrentDirectory
+     let testDir     = "tests" </> "data" </> "output-target"
+         oDir        = testDir </> "tmp"
+         testProgram = "tmp" </> "myprogram"
+         args        =  [ "--make", "Prog.hs", "-o", testProgram ]
+         badExe      = testDir </> "Prog"
+
+     recreateDirectory oDir
+
+     -- Remove potentially existing old bad executable
+     progExists <- doesFileExist badExe
+     when progExists $ removeFile badExe
+
+     exitCode <- getExitCode (curDir </> makeProgram) args testDir
+
+     (do assertEqual "ghc-parmake invocation failed!" ExitSuccess exitCode
+         progExist <- doesFileExist (testDir </> testProgram)
+         assertBool "target specified via -o was not created" progExist
+         badExist <- doesFileExist badExe
+         assertBool "executable was created next to source file (should not)"
+                    (not badExist)
+       ) `finally` removeDirectoryRecursive oDir
+
 
 ------------------------------------------------------------------------
 -- Test harness
@@ -155,5 +188,8 @@ tests =
       [ testCase dirName (mkTestCase dirName 2)
       | dirName <- [ "executable" , "executable-lhs"
                    , "executable-mutrec", "executable-lhs-mutrec" ]
+      ]
+    , testGroup "custom tests"
+      [ testCase "-o does not create superfluous exe" testSuperfluousExe
       ]
     ]
