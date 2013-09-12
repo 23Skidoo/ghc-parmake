@@ -6,8 +6,7 @@ import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
-import System.FilePath (dropExtension)
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, stderr, hSetBuffering, BufferMode(LineBuffering))
 
 import GHC.ParMake.Common (maybeRead)
 import GHC.ParMake.Util
@@ -90,9 +89,15 @@ splitOffPrefix p s = case splitAt (length p) s of
   _                 -> Nothing
 
 
-getGhcArgs :: [String] -> ([String],[String])
-getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
-                  in (reverse as, reverse fs)
+-- | Processes a list of arguments, returning:
+-- * the GHC arguments we want to use in parmake
+-- * the files to be compiled
+-- * the original GHC arguments with custom parmake arguments removed
+--   (thus also contains files)
+getGhcArgs :: [String] -> ([String],[String],[String])
+getGhcArgs argv = let nonParmakeArgs = rmArgs argv
+                      (args, files) = mkArgs nonParmakeArgs [] []
+                  in (args, files, nonParmakeArgs)
   where
     pgmSuffixes = ["L", "P", "c", "m", "s", "a", "l", "dll", "F", "windres"]
     optsWithArg = [ "-odir", "-hidir", "-ohi", "-stubdir", "-outputdir"
@@ -112,19 +117,26 @@ getGhcArgs argv = let (as, fs) = getGhcArgs' argv [] []
       | opt `elem` optsWithArg = (xs, arg:opt:as)
     eatOption (x:xs) as        = (xs, x:as)
 
-    getGhcArgs' [] as fs                      = (as, fs)
+    -- Processes GHC args to create GHC style args suiting for parmake,
+    -- and splitting files apart.
+    mkArgs [] as fs                     = (reverse as, reverse fs)
+    mkArgs ("-o":_:xs) as fs            = mkArgs xs as fs
+    mkArgs ("--make":xs) as fs          = mkArgs xs as fs
+    mkArgs xs@(('-':_):_) as fs         = let (xs', as') = eatOption xs as
+                                          in mkArgs xs' as' fs
+    mkArgs (x:xs) as fs                 = mkArgs xs as (x:fs)
+
+    -- Removes parmake args from a list of arguments.
+    rmArgs []                           = []
     -- Options not passed to GHC: -o, -j, -vv, --ghc-path, --make.
-    getGhcArgs' ("-j":_:xs) as fs             = getGhcArgs' xs as fs
-    getGhcArgs' ("-o":_:xs) as fs             = getGhcArgs' xs as fs
-    getGhcArgs' (('-':'v':'v':_:[]):xs) as fs = getGhcArgs' xs as fs
-    getGhcArgs' ("--skip-final-pass":xs) as fs = getGhcArgs' xs as fs
-    getGhcArgs' ("--ghc-path":_:xs)     as fs = getGhcArgs' xs as fs
-    getGhcArgs' (x:xs) as fs
-      | "--ghc-path=" `isPrefixOf` x          = getGhcArgs' xs as fs
-    getGhcArgs' ("--make":xs) as fs           = getGhcArgs' xs as fs
-    getGhcArgs' xs@(('-':_):_) as fs          = let (xs', as') = eatOption xs as
-                                                in getGhcArgs' xs' as' fs
-    getGhcArgs' (x:xs) as fs                  = getGhcArgs' xs as (x:fs)
+    rmArgs ("-j":_:xs)                  = rmArgs xs
+    rmArgs (('-':'v':'v':_:[]):xs)      = rmArgs xs
+    rmArgs ("--skip-final-pass":xs)     = rmArgs xs
+    rmArgs ("--ghc-path":_:xs)          = rmArgs xs
+    rmArgs (x:xs)
+      | "--ghc-path=" `isPrefixOf` x    = rmArgs xs
+    rmArgs (arg:xs)                     = arg : rmArgs xs
+
 
 usage :: IO ()
 usage =
@@ -169,10 +181,7 @@ usage =
 -- [2 of 2] Compiling Main             ( MyProg.hs, t/Main.o )
 -- Linking MyProg ...
 --
-guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
-guessOutputFilename (Just n) _  = Just n
-guessOutputFilename Nothing [n] = Just (dropExtension n)
-guessOutputFilename Nothing _   = Nothing
+-- We currently solve this problem by the final real GHC pass.
 
 -- | All flags conflicting with `ghc -M`.
 -- Obtained from the man page (listed in the same order as they appear there)
@@ -212,9 +221,12 @@ flagsConflictingWithM =
 
 main :: IO ()
 main =
-  do argv <- getArgs
+  do -- Set stderr to line buffering to prevent interleaved GHC errors
+     hSetBuffering stderr LineBuffering
+
+     argv <- getArgs
      let args = parseArgs argv
-     let (ghcArgs, files) = getGhcArgs argv
+     let (parmakeGhcArgs, files, nonParmakeArgs) = getGhcArgs argv
      let v = verbosity $ args
 
      when (printVersion args)   $ putStrLn "ghc-parmake 0.1.6" >> exitSuccess
@@ -230,10 +242,9 @@ main =
      -- * No input files are given
      -- * An option conflicting with "-M" is given
      let passToGhc = exitWith =<<
-           runProcess defaultOutputHooks Nothing (ghcPath args)
-                                                 (ghcArgs ++ files)
+           runProcess defaultOutputHooks Nothing (ghcPath args) nonParmakeArgs
 
-     when (any (`elem` ghcArgs) flagsConflictingWithM) $ passToGhc
+     when (any (`elem` parmakeGhcArgs) flagsConflictingWithM) $ passToGhc
 
      -- We must not print this (or any other output) before handling the
      -- skip-to-GHC cases above.
@@ -242,7 +253,7 @@ main =
      when (null files) $ passToGhc
 
      debug' v "Running ghc -M (twice)..."
-     deps <- Parse.getModuleDeps v (ghcPath args) ghcArgs files
+     deps <- Parse.getModuleDeps v (ghcPath args) parmakeGhcArgs files
      when (null deps) $ do
       hPutStrLn stderr "ghc-parmake: no dependencies"
       exitFailure
@@ -254,13 +265,12 @@ main =
      debug' v ("Produced a build plan:\n" ++ show plan)
 
      debug' v "Building..."
-     let ofn = guessOutputFilename (outputFilename args) files
      exitCode <- Engine.compile v plan (numJobs args)
-                 (ghcPath args) ghcArgs files ofn
+                 (ghcPath args) parmakeGhcArgs files (outputFilename args)
      when (exitCode /= ExitSuccess) $ exitWith exitCode
 
      unless (skipFinalPass args) $ do
        debug' v $ "Running final ghc --make pass "
          ++ "to account for changes ghc -M cannot notice: "
-         ++ ghcPath args ++ " " ++ unwords (ghcArgs ++ files)
+         ++ ghcPath args ++ " " ++ unwords nonParmakeArgs
        passToGhc -- exits the program
