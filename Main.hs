@@ -4,6 +4,7 @@ module Main
 import Control.Monad (liftM, when)
 import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
+import Data.Version (showVersion)
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.IO (hPutStrLn, stderr, hSetBuffering, BufferMode(LineBuffering))
@@ -14,6 +15,8 @@ import GHC.ParMake.Util
 import qualified GHC.ParMake.BuildPlan as BuildPlan
 import qualified GHC.ParMake.Parse as Parse
 import qualified GHC.ParMake.Engine as Engine
+
+import qualified Paths_ghc_parmake (version)
 
 -- Argument handling.
 
@@ -222,7 +225,9 @@ main =
      let (parmakeGhcArgs, files, nonParmakeArgs) = getGhcArgs argv
      let v = verbosity $ args
 
-     when (printVersion args)   $ putStrLn "ghc-parmake 0.1.9" >> exitSuccess
+     when (printVersion args)   $ putStrLn
+       ("ghc-parmake " ++ showVersion Paths_ghc_parmake.version)
+       >> exitSuccess
      when (printUsage args)     $ usage >> exitSuccess
 
      when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
