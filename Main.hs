@@ -222,7 +222,7 @@ main =
      let (parmakeGhcArgs, files, nonParmakeArgs) = getGhcArgs argv
      let v = verbosity $ args
 
-     when (printVersion args)   $ putStrLn "ghc-parmake 0.1.8" >> exitSuccess
+     when (printVersion args)   $ putStrLn "ghc-parmake 0.1.9" >> exitSuccess
      when (printUsage args)     $ usage >> exitSuccess
 
      when (null $ ghcPath args) $ fatal "ghc path is invalid" >> exitFailure
