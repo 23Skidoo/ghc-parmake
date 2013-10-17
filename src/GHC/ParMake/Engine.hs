@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- Parallel 'make' engine.
@@ -5,7 +6,10 @@
 module GHC.ParMake.Engine
        where
 
+#if !MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
+#endif
+
 import Control.Concurrent (forkIO, newChan, readChan, writeChan, Chan)
 import Control.Exception (SomeException, assert, bracket, catch)
 import Control.Monad (foldM, forever, forM_, when)
