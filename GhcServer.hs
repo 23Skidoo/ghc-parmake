@@ -18,7 +18,7 @@ import qualified DriverPhases
 import MonadUtils (MonadIO, liftIO)
 
 import Control.Monad      (forever, void, when)
-import Control.Exception      (SomeException, catch)
+import Control.Exception  (SomeException, catch)
 import System.Environment (getArgs)
 import System.IO          (BufferMode (LineBuffering), Handle,
                            hGetLine, hPutStrLn,
