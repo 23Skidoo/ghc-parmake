@@ -49,8 +49,8 @@ Library
                         GHC.ParMake.Util
   Other-modules:        Distribution.Compat.ReadP
   Hs-source-dirs:       src
-  Build-depends:        base >= 4 && < 5,
-                        array >= 0.3 && < 0.5,
+  Build-depends:        base >= 4 && < 4.9,
+                        array >= 0.3 && < 0.6,
                         containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
@@ -63,7 +63,8 @@ Library
 Executable ghc-parmake
   Main-is:              GhcParmake.hs
   Build-depends:        ghc-parmake == 0.2.0,
-                        array >= 0.3 && < 0.5, base >= 4 && < 5,
+                        base >= 4 && < 4.9,
+                        array >= 0.3 && < 0.6,
                         containers >= 0.4 && < 0.6,
                         process >= 1 && < 2, temporary >= 1 && < 2,
                         filepath >= 1 && < 2, directory >= 1.1 && < 2
@@ -77,7 +78,7 @@ Executable ghc-server
   Build-depends:        ghc-parmake == 0.2.*,
                         ghc == 7.*,
                         ghc-paths >= 0.1.0.9,
-                        base >= 4 && < 5,
+                        base >= 4 && < 4.9,
                         process >= 1 && < 2
   GHC-options:          -Wall -threaded -rtsopts
   Other-extensions:     CPP, ScopedTypeVariables
@@ -88,7 +89,7 @@ Test-suite tests
   Type:                 exitcode-stdio-1.0
   Hs-source-dirs:       tests
   Main-is:              Tests.hs
-  Build-depends:        base >= 4.0 && < 5,
+  Build-depends:        base >= 4 && < 4.9,
                         filepath >= 1 && < 2,
                         directory >= 1.1 && < 2,
                         process >= 1 && < 2,
