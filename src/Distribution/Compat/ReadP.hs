@@ -14,11 +14,10 @@
 -- it makes no difference which branch is \"shorter\".
 --
 -- See also Koen's paper /Parallel Parsing Processes/
--- (<http://www.cs.chalmers.se/~koen/publications.html>).
+-- (<http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.19.9217>).
 --
 -- This version of ReadP has been locally hacked to make it H98, by
 -- Martin Sj&#xF6;gren <mailto:msjogren@gmail.com>
---
 -----------------------------------------------------------------------------
 
 module Distribution.Compat.ReadP
@@ -64,14 +63,12 @@ module Distribution.Compat.ReadP
   ReadS,      -- :: *; = String -> [(a,String)]
   readP_to_S, -- :: ReadP a -> ReadS a
   readS_to_P  -- :: ReadS a -> ReadP a
-
-  -- * Properties
-  -- $properties
   )
  where
 
-import Control.Monad( MonadPlus(..), liftM2 )
+import Control.Monad( MonadPlus(..), liftM, liftM2, replicateM, ap, (>=>) )
 import Data.Char (isSpace)
+import Control.Applicative as AP (Applicative(..), Alternative(empty, (<|>)))
 
 infixr 5 +++, <++
 
@@ -88,16 +85,27 @@ data P s a
 
 -- Monad, MonadPlus
 
-instance Monad (P s) where
-  return x = Result x Fail
+instance Functor (P s) where
+  fmap = liftM
 
-  (Get f)      >>= k = Get (\c -> f c >>= k)
-  (Look f)     >>= k = Look (\s -> f s >>= k)
+instance Applicative (P s) where
+  pure x = Result x Fail
+  (<*>) = ap
+
+instance Monad (P s) where
+  return = AP.pure
+
+  (Get f)      >>= k = Get (f >=> k)
+  (Look f)     >>= k = Look (f >=> k)
   Fail         >>= _ = Fail
   (Result x p) >>= k = k x `mplus` (p >>= k)
   (Final r)    >>= k = final [ys' | (x,s) <- r, ys' <- run (k x) s]
 
   fail _ = Fail
+
+instance Alternative (P s) where
+      empty = mzero
+      (<|>) = mplus
 
 instance MonadPlus (P s) where
   mzero = Fail
@@ -139,9 +147,13 @@ type ReadP r a = Parser r Char a
 instance Functor (Parser r s) where
   fmap h (R f) = R (\k -> f (k . h))
 
+instance Applicative (Parser r s) where
+  pure x  = R (\k -> k x)
+  (<*>) = ap
+
 instance Monad (Parser r s) where
-  return x  = R (\k -> k x)
-  fail _    = R (\_ -> Fail)
+  return = AP.pure
+  fail _    = R (const Fail)
   R m >>= f = R (\k -> m (\a -> let R m' = f a in m' k))
 
 --instance MonadPlus (Parser r s) where
@@ -178,7 +190,7 @@ look = R Look
 
 pfail :: ReadP r a
 -- ^ Always fails.
-pfail = R (\_ -> Fail)
+pfail = R (const Fail)
 
 (+++) :: ReadP r a -> ReadP r a -> ReadP r a
 -- ^ Symmetric choice.
@@ -211,7 +223,7 @@ gather (R m) =
  where
   gath l (Get f)      = Get (\c -> gath (l.(c:)) (f c))
   gath _ Fail         = Fail
-  gath l (Look f)     = Look (\s -> gath l (f s))
+  gath l (Look f)     = Look (gath l . f)
   gath l (Result k p) = k (l []) `mplus` gath l p
   gath _ (Final _)    = error "do not use readS_to_P in gather!"
 
@@ -231,9 +243,9 @@ string :: String -> ReadP r String
 -- ^ Parses and returns the specified string.
 string this = do s <- look; scan this s
  where
-  scan []     _               = do return this
-  scan (x:xs) (y:ys) | x == y = do get >> scan xs ys
-  scan _      _               = do pfail
+  scan []     _               = return this
+  scan (x:xs) (y:ys) | x == y = get >> scan xs ys
+  scan _      _               = pfail
 
 munch :: (Char -> Bool) -> ReadP r String
 -- ^ Parses the first zero or more characters satisfying the predicate.
@@ -269,7 +281,7 @@ skipSpaces =
 count :: Int -> ReadP r a -> ReadP r [a]
 -- ^ @ count n p @ parses @n@ occurrences of @p@ in sequence. A list of
 --   results is returned.
-count n p = sequence (replicate n p)
+count n p = replicateM n p
 
 between :: ReadP r open -> ReadP r close -> ReadP r a -> ReadP r a
 -- ^ @ between open close p @ parses @open@, followed by @p@ and finally
@@ -377,94 +389,3 @@ readS_to_P :: ReadS a -> ReadP r a
 --   parser, and therefore a possible inefficiency.
 readS_to_P r =
   R (\k -> Look (\s -> final [bs'' | (a,s') <- r s, bs'' <- run (k a) s']))
-
--- ---------------------------------------------------------------------------
--- QuickCheck properties that hold for the combinators
-
-{- $properties
-The following are QuickCheck specifications of what the combinators do.
-These can be seen as formal specifications of the behavior of the
-combinators.
-
-We use bags to give semantics to the combinators.
-
->  type Bag a = [a]
-
-Equality on bags does not care about the order of elements.
-
->  (=~) :: Ord a => Bag a -> Bag a -> Bool
->  xs =~ ys = sort xs == sort ys
-
-A special equality operator to avoid unresolved overloading
-when testing the properties.
-
->  (=~.) :: Bag (Int,String) -> Bag (Int,String) -> Bool
->  (=~.) = (=~)
-
-Here follow the properties:
-
->  prop_Get_Nil =
->    readP_to_S get [] =~ []
->
->  prop_Get_Cons c s =
->    readP_to_S get (c:s) =~ [(c,s)]
->
->  prop_Look s =
->    readP_to_S look s =~ [(s,s)]
->
->  prop_Fail s =
->    readP_to_S pfail s =~. []
->
->  prop_Return x s =
->    readP_to_S (return x) s =~. [(x,s)]
->
->  prop_Bind p k s =
->    readP_to_S (p >>= k) s =~.
->      [ ys''
->      | (x,s') <- readP_to_S p s
->      , ys''   <- readP_to_S (k (x::Int)) s'
->      ]
->
->  prop_Plus p q s =
->    readP_to_S (p +++ q) s =~.
->      (readP_to_S p s ++ readP_to_S q s)
->
->  prop_LeftPlus p q s =
->    readP_to_S (p <++ q) s =~.
->      (readP_to_S p s +<+ readP_to_S q s)
->   where
->    [] +<+ ys = ys
->    xs +<+ _  = xs
->
->  prop_Gather s =
->    forAll readPWithoutReadS $ \p ->
->      readP_to_S (gather p) s =~
->	 [ ((pre,x::Int),s')
->	 | (x,s') <- readP_to_S p s
->	 , let pre = take (length s - length s') s
->	 ]
->
->  prop_String_Yes this s =
->    readP_to_S (string this) (this ++ s) =~
->      [(this,s)]
->
->  prop_String_Maybe this s =
->    readP_to_S (string this) s =~
->      [(this, drop (length this) s) | this `isPrefixOf` s]
->
->  prop_Munch p s =
->    readP_to_S (munch p) s =~
->      [(takeWhile p s, dropWhile p s)]
->
->  prop_Munch1 p s =
->    readP_to_S (munch1 p) s =~
->      [(res,s') | let (res,s') = (takeWhile p s, dropWhile p s), not (null res)]
->
->  prop_Choice ps s =
->    readP_to_S (choice ps) s =~.
->      readP_to_S (foldr (+++) pfail ps) s
->
->  prop_ReadS r s =
->    readP_to_S (readS_to_P r) s =~. r s
--}
-
